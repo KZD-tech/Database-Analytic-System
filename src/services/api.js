@@ -21,8 +21,8 @@ export function getSummary() {
   return api.get('/summary').then((res) => res.data).catch(() => ({ total: 0, active: 0, repeat: 0, dormant: 0, churn: 0, total_collection: 0, avg_order_value: 0, donation_count: 0 }));
 }
 
-export function getCustomers() {
-  return api.get('/customers').then((res) => res.data).catch(() => []);
+export function getCustomers(params = {}) {
+  return api.get('/customers', { params }).then((res) => res.data).catch(() => ({ customers: [], total: 0, page: 1, per_page: 50, total_pages: 0 }));
 }
 
 export function getCustomerDetail(id) {
@@ -51,4 +51,46 @@ export function createStaff(payload) {
 
 export function bulkUploadOrders(csvContent) {
   return api.post('/orders/bulk-upload', { csv: csvContent }).then((res) => res.data);
+}
+
+// User management
+export function getUsers() {
+  return api.get('/users').then((res) => res.data).catch(() => []);
+}
+
+export function getCurrentUser() {
+  return api.get('/users/me').then((res) => res.data).catch(() => null);
+}
+
+export function createUser(payload) {
+  return api.post('/users', payload).then((res) => res.data);
+}
+
+export function updateUser(id, payload) {
+  return api.put(`/users/${id}`, payload).then((res) => res.data);
+}
+
+export function deleteUser(id) {
+  return api.delete(`/users/${id}`).then((res) => res.data);
+}
+
+// Webhook management
+export function getWebhooks() {
+  return api.get('/webhooks').then((res) => res.data).catch(() => []);
+}
+
+export function createWebhook(payload) {
+  return api.post('/webhooks', payload).then((res) => res.data);
+}
+
+export function updateWebhook(id, payload) {
+  return api.put(`/webhooks/${id}`, payload).then((res) => res.data);
+}
+
+export function deleteWebhook(id) {
+  return api.delete(`/webhooks/${id}`).then((res) => res.data);
+}
+
+export function getWebhookLogs() {
+  return api.get('/webhooks/logs').then((res) => res.data).catch(() => []);
 }

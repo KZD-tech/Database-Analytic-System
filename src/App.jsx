@@ -1,21 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router-dom';
-import { Database, LayoutDashboard, PlusCircle, Users } from 'lucide-react';
-import { getSummary, getCustomers, getOrders, adminLogin } from './services/api';
+import { Database, LayoutDashboard, PlusCircle, Users, Webhook, Shield } from 'lucide-react';
+import { getSummary, getOrders, adminLogin } from './services/api';
 import Dashboard from './components/Dashboard';
 import CustomerDetail from './components/CustomerDetail';
 import OrderInput from './components/OrderInput';
 import StaffPanel from './components/StaffPanel';
 import Login from './components/Login';
+import UserManagement from './components/UserManagement';
+import WebhooksPanel from './components/WebhooksPanel';
 
 function App() {
   const [summary, setSummary] = useState({ total: 0, active: 0, repeat: 0, dormant: 0, churn: 0, total_collection: 0, avg_order_value: 0, donation_count: 0 });
-  const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [sourceFilter, setSourceFilter] = useState('all');
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem('admin_token'));
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('admin_user');
@@ -25,11 +23,13 @@ function App() {
   const location = useLocation();
   const isLoginRoute = location.pathname === '/login';
 
+  const isAdmin = currentUser?.role === 'admin';
+  const isManagerOrAbove = currentUser?.role === 'admin' || currentUser?.role === 'manager';
+
   const loadData = async () => {
     setLoading(true);
-    const [summaryData, customersData, ordersData] = await Promise.all([getSummary(), getCustomers(), getOrders()]);
+    const [summaryData, ordersData] = await Promise.all([getSummary(), getOrders()]);
     setSummary(summaryData);
-    setCustomers(customersData);
     setOrders(ordersData);
     setLoading(false);
   };
@@ -51,9 +51,10 @@ function App() {
     setLoading(true);
     const response = await adminLogin({ email, password });
     localStorage.setItem('admin_token', response.token);
-    localStorage.setItem('admin_user', JSON.stringify({ email }));
+    const user = response.user || { email, role: 'admin' };
+    localStorage.setItem('admin_user', JSON.stringify(user));
     setAdminToken(response.token);
-    setCurrentUser({ email });
+    setCurrentUser(user);
     await loadData();
     navigate('/');
   };
@@ -66,8 +67,15 @@ function App() {
     navigate('/login');
   };
 
-  const PrivateRoute = ({ children }) => {
-    return adminToken ? children : <Navigate to="/login" replace />;
+  const PrivateRoute = ({ children, minRole }) => {
+    if (!adminToken) return <Navigate to="/login" replace />;
+    if (minRole && currentUser) {
+      const levels = { admin: 4, manager: 3, editor: 2, viewer: 1 };
+      const userLevel = levels[currentUser.role] || 0;
+      const minLevel = levels[minRole] || 1;
+      if (userLevel < minLevel) return <Navigate to="/" replace />;
+    }
+    return children;
   };
 
   return (
@@ -101,9 +109,34 @@ function App() {
                 <Database className="h-4 w-4 text-slate-300" />
                 Staf
               </Link>
+              {isManagerOrAbove && (
+                <Link
+                  to="/webhooks"
+                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+                >
+                  <Webhook className="h-4 w-4 text-slate-300" />
+                  Webhooks
+                </Link>
+              )}
+              {isAdmin && (
+                <Link
+                  to="/users"
+                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+                >
+                  <Shield className="h-4 w-4 text-slate-300" />
+                  Pengguna
+                </Link>
+              )}
             </nav>
+
             {adminToken && (
-              <div className="mt-8 border-t border-slate-200 pt-4">
+              <div className="mt-8 border-t border-slate-700 pt-4">
+                {currentUser && (
+                  <div className="mb-3 px-2">
+                    <p className="text-xs text-slate-400 truncate">{currentUser.full_name || currentUser.email}</p>
+                    <p className="text-xs text-slate-500 capitalize">{currentUser.role || 'admin'}</p>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={handleLogout}
@@ -128,15 +161,8 @@ function App() {
                 <PrivateRoute>
                   <Dashboard
                     summary={summary}
-                    customers={customers}
                     orders={orders}
                     loading={loading}
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    statusFilter={statusFilter}
-                    setStatusFilter={setStatusFilter}
-                    sourceFilter={sourceFilter}
-                    setSourceFilter={setSourceFilter}
                     onLogout={handleLogout}
                     currentUser={currentUser}
                   />
@@ -164,6 +190,22 @@ function App() {
               element={
                 <PrivateRoute>
                   <StaffPanel />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <PrivateRoute minRole="admin">
+                  <UserManagement />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/webhooks"
+              element={
+                <PrivateRoute minRole="manager">
+                  <WebhooksPanel />
                 </PrivateRoute>
               }
             />
