@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Download, Search, TrendingUp, Users, Repeat, Clock, Zap, Activity, PlusCircle } from 'lucide-react';
+import { Download, Search, TrendingUp, Users, Repeat, Clock, Zap, Activity, PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { getCustomers } from '../services/api';
 
 const statusBadges = {
   active: 'bg-emerald-100 text-emerald-700',
@@ -64,7 +65,7 @@ const monthlyDonationSeries = (orders, startDate, endDate) => {
     const orderDate = parseDate(order.order_date);
     if (!orderDate) return;
     if (start && orderDate < start) return;
-      if (end && orderDate > end) return;
+    if (end && orderDate > end) return;
   });
 
   return months.map((month) => ({ label: month.key, value: totals[month.key] || 0 }));
@@ -109,10 +110,47 @@ const donationChartData = (series) => {
   return { width, height, padding, points, path, areaPath, maxValue };
 };
 
-export default function Dashboard({ summary, customers, orders, loading, searchQuery, setSearchQuery, statusFilter, setStatusFilter, sourceFilter, setSourceFilter }) {
+const PER_PAGE = 50;
+
+export default function Dashboard({ summary, orders, loading: appLoading }) {
   const navigate = useNavigate();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [page, setPage] = useState(1);
+
+  // Server-side paginated state
+  const [customersData, setCustomersData] = useState({ customers: [], total: 0, page: 1, per_page: PER_PAGE, total_pages: 0 });
+  const [tableLoading, setTableLoading] = useState(false);
+
+  const fetchCustomers = useCallback(async (params) => {
+    setTableLoading(true);
+    const result = await getCustomers(params);
+    setCustomersData(result);
+    setTableLoading(false);
+  }, []);
+
+  useEffect(() => {
+    const params = {
+      page,
+      per_page: PER_PAGE
+    };
+    if (searchQuery) params.search = searchQuery;
+    if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
+    if (sourceFilter && sourceFilter !== 'all') params.source = sourceFilter;
+    if (startDate) params.from_date = startDate;
+    if (endDate) params.to_date = endDate;
+
+    fetchCustomers(params);
+  }, [page, searchQuery, statusFilter, sourceFilter, startDate, endDate, fetchCustomers]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, statusFilter, sourceFilter, startDate, endDate]);
+
   const start = parseDate(startDate);
   const end = parseDate(endDate);
 
@@ -124,7 +162,6 @@ export default function Dashboard({ summary, customers, orders, loading, searchQ
     return true;
   });
 
-  const donorIdsInRange = new Set(ordersInRange.map((order) => order.customer_id));
   const donationCount = ordersInRange.length;
   const totalCollection = ordersInRange.reduce((sum, order) => sum + Number(order.amount || 0), 0);
   const averageDonation = donationCount ? totalCollection / donationCount : 0;
@@ -133,8 +170,19 @@ export default function Dashboard({ summary, customers, orders, loading, searchQ
 
   const formatCsvValue = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
-  const exportCustomers = (data) => {
+  const exportCustomers = async () => {
+    // Fetch all matching records for export (no pagination)
+    const params = { page: 1, per_page: 200 };
+    if (searchQuery) params.search = searchQuery;
+    if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
+    if (sourceFilter && sourceFilter !== 'all') params.source = sourceFilter;
+    if (startDate) params.from_date = startDate;
+    if (endDate) params.to_date = endDate;
+
+    const result = await getCustomers(params);
+    const data = result.customers || [];
     if (!data || data.length === 0) return;
+
     const header = ['Nama', 'Telefon', 'Emel', 'Sumber', 'Pesanan', 'Jumlah', 'Pembelian pertama', 'Pembelian terkini', 'AOV', 'Status'];
     const rows = data.map((customer) => [
       customer.full_name,
@@ -160,20 +208,10 @@ export default function Dashboard({ summary, customers, orders, loading, searchQ
     URL.revokeObjectURL(url);
   };
 
-  const filteredCustomers = customers.filter((customer) => {
-    const query = searchQuery.toLowerCase();
-    const matchesSearch =
-      !query ||
-      customer.full_name.toLowerCase().includes(query) ||
-      (customer.email || '').toLowerCase().includes(query) ||
-      (customer.phone || '').toLowerCase().includes(query);
-
-    const matchesStatus = statusFilter === 'all' || customer.status === statusFilter;
-    const matchesSource = sourceFilter === 'all' || (customer.source || 'other') === sourceFilter;
-    const matchesDate = !startDate && !endDate ? true : donorIdsInRange.has(customer.id);
-
-    return matchesSearch && matchesStatus && matchesSource && matchesDate;
-  });
+  const { customers, total, total_pages } = customersData;
+  const currentPage = customersData.page || 1;
+  const startIdx = (currentPage - 1) * PER_PAGE + 1;
+  const endIdx = Math.min(currentPage * PER_PAGE, total);
 
   return (
     <div className="space-y-8">
@@ -187,7 +225,7 @@ export default function Dashboard({ summary, customers, orders, loading, searchQ
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={() => exportCustomers(filteredCustomers)}
+              onClick={exportCustomers}
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
             >
               <Download className="h-4 w-4" />
@@ -206,7 +244,7 @@ export default function Dashboard({ summary, customers, orders, loading, searchQ
 
       <div className="grid gap-4 xl:grid-cols-4">
         {[
-          { label: 'Jumlah dermawan', value: startDate || endDate ? customers.filter((customer) => donorIdsInRange.has(customer.id)).length : summary.total, icon: Users, accent: 'bg-slate-900 text-white' },
+          { label: 'Jumlah dermawan', value: startDate || endDate ? customers.length : summary.total, icon: Users, accent: 'bg-slate-900 text-white' },
           { label: 'Jumlah sumbangan', value: `RM ${totalCollection.toFixed(2)}`, icon: Zap, accent: 'bg-emerald-50 text-emerald-700' },
           { label: 'Purata sumbangan', value: `RM ${averageDonation.toFixed(2)}`, icon: TrendingUp, accent: 'bg-sky-50 text-sky-700' },
           { label: 'Transaksi sumbangan', value: donationCount, icon: Activity, accent: 'bg-amber-50 text-amber-700' }
@@ -336,7 +374,13 @@ export default function Dashboard({ summary, customers, orders, loading, searchQ
             <h3 className="text-xl font-semibold text-slate-950">Senarai dermawan</h3>
             <p className="mt-1 text-sm text-slate-500">Semak taburan sumbangan, nilai transaksi dan dermawan terkini.</p>
           </div>
-          <p className="text-sm text-slate-500">Memaparkan {filteredCustomers.length} daripada {customers.length}</p>
+          {total > 0 ? (
+            <p className="text-sm text-slate-500">
+              Memaparkan {startIdx}–{endIdx} daripada {total} dermawan
+            </p>
+          ) : (
+            <p className="text-sm text-slate-500">0 dermawan</p>
+          )}
         </div>
 
         <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
@@ -355,16 +399,16 @@ export default function Dashboard({ summary, customers, orders, loading, searchQ
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
-              {loading ? (
+              {appLoading || tableLoading ? (
                 <tr>
-                  <td colSpan="9" className="px-4 py-10 text-center text-slate-500">Loading customer data…</td>
+                  <td colSpan="9" className="px-4 py-10 text-center text-slate-500">Memuatkan data dermawan…</td>
                 </tr>
-              ) : filteredCustomers.length === 0 ? (
+              ) : customers.length === 0 ? (
                 <tr>
                   <td colSpan="9" className="px-4 py-10 text-center text-slate-500">Tiada pelanggan sepadan. Tukar penapis atau tambah pesanan baru.</td>
                 </tr>
               ) : (
-                filteredCustomers.map((customer) => (
+                customers.map((customer) => (
                   <tr
                     key={customer.id}
                     onClick={() => navigate(`/customer/${customer.id}`)}
@@ -402,6 +446,32 @@ export default function Dashboard({ summary, customers, orders, loading, searchQ
             </tbody>
           </table>
         </div>
+
+        {total_pages > 1 && (
+          <div className="mt-4 flex items-center justify-between gap-4">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Sebelum
+            </button>
+            <span className="text-sm text-slate-500">
+              Halaman {currentPage} daripada {total_pages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(total_pages, p + 1))}
+              disabled={currentPage >= total_pages}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Seterusnya
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </section>
     </div>
   );
