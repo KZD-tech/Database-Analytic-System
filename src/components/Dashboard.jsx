@@ -33,44 +33,31 @@ const parseDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-
-const buildDonationPath = (points) => {
-  if (!points.length) return '';
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
-
-  let d = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length; i += 1) {
-    const prev = points[i - 1];
-    const current = points[i];
-    const midX = (prev.x + current.x) / 2;
-    const midY = (prev.y + current.y) / 2;
-    d += ` Q ${prev.x} ${prev.y} ${midX} ${midY}`;
-  }
-  const last = points[points.length - 1];
-  d += ` T ${last.x} ${last.y}`;
-  return d;
-};
-
-const donationChartData = (series) => {
+const barChartData = (series) => {
   const width = 680;
-  const height = 260;
-  const padding = 32;
+  const height = 280;
+  const paddingLeft = 56;
+  const paddingRight = 16;
+  const paddingTop = 24;
+  const paddingBottom = 48;
+  const plotWidth = width - paddingLeft - paddingRight;
+  const plotHeight = height - paddingTop - paddingBottom;
+
   const values = series.map((item) => item.value);
   const maxValue = Math.max(...values, 1);
-  const minValue = Math.min(...values, 0);
-  const range = maxValue - minValue || 1;
-  const plotWidth = width - padding * 2;
-  const plotHeight = height - padding * 2;
 
-  const points = series.map((item, index) => {
-    const x = padding + (index * plotWidth) / (series.length - 1);
-    const y = padding + (1 - (item.value - minValue) / range) * plotHeight;
-    return { ...item, x, y };
+  const slotWidth = plotWidth / Math.max(series.length, 1);
+  const barWidth = Math.max(6, slotWidth * 0.6);
+
+  const bars = series.map((item, index) => {
+    const slotX = paddingLeft + index * slotWidth;
+    const barX = slotX + (slotWidth - barWidth) / 2;
+    const barHeight = Math.max(2, (item.value / maxValue) * plotHeight);
+    const barY = paddingTop + plotHeight - barHeight;
+    return { ...item, barX, barY, barWidth, barHeight };
   });
 
-  const path = buildDonationPath(points);
-  const areaPath = `${path} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`;
-  return { width, height, padding, points, path, areaPath, maxValue };
+  return { width, height, paddingLeft, paddingTop, paddingBottom, plotWidth, plotHeight, bars, maxValue };
 };
 
 const PER_PAGE = 50;
@@ -130,8 +117,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
     });
   }, [startDate, endDate]);
 
-  const hasDateFilter = Boolean(startDate || endDate);
-  const chartData = donationChartData(chartSeries.length > 0 ? chartSeries : [{ label: '—', value: 0 }]);
+  const barData = barChartData(chartSeries.length > 0 ? chartSeries : [{ label: '—', value: 0 }]);
 
   const formatCsvValue = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
@@ -240,37 +226,73 @@ export default function Dashboard({ summary, loading: appLoading }) {
 
         <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-5">
           <div className="relative overflow-hidden rounded-xl bg-white p-4 shadow-sm">
-            <svg viewBox="0 0 680 260" className="w-full h-[260px]">
-              <defs>
-                <linearGradient id="donationGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#0f172a" stopOpacity="0.22" />
-                  <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
-                </linearGradient>
-                <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#0284c7" />
-                  <stop offset="100%" stopColor="#2563eb" />
-                </linearGradient>
-              </defs>
-              <g opacity="0.45">
-                <line x1="40" y1="42" x2="640" y2="42" stroke="#e2e8f0" strokeWidth="1" />
-                <line x1="40" y1="104" x2="640" y2="104" stroke="#e2e8f0" strokeWidth="1" />
-                <line x1="40" y1="166" x2="640" y2="166" stroke="#e2e8f0" strokeWidth="1" />
-                <line x1="40" y1="228" x2="640" y2="228" stroke="#e2e8f0" strokeWidth="1" />
-              </g>
-              <path d={chartData.areaPath} fill="url(#donationGradient)" />
-              <path d={chartData.path} fill="none" stroke="url(#lineGradient)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-              {chartData.points.map((point) => (
-                <g key={point.label}>
-                  <circle cx={point.x} cy={point.y} r="6" fill="#ffffff" stroke="#2563eb" strokeWidth="3" />
-                  <circle cx={point.x} cy={point.y} r="3" fill="#0f172a" />
-                </g>
-              ))}
-              {chartData.points.map((point) => (
-                <text key={`${point.label}-label`} x={point.x} y="250" fill="#64748b" fontSize="11" textAnchor="middle">
-                  {point.label}
-                </text>
-              ))}
-            </svg>
+            {chartLoading ? (
+              <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">Memuatkan graf…</div>
+            ) : (
+              <svg viewBox={`0 0 ${barData.width} ${barData.height}`} className="w-full h-[280px]">
+                <defs>
+                  <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2563eb" />
+                    <stop offset="100%" stopColor="#0284c7" />
+                  </linearGradient>
+                  <linearGradient id="barGradientHover" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#1d4ed8" />
+                    <stop offset="100%" stopColor="#0369a1" />
+                  </linearGradient>
+                </defs>
+
+                {/* Horizontal grid lines + Y-axis labels */}
+                {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
+                  const y = barData.paddingTop + (1 - tick) * barData.plotHeight;
+                  const val = tick * barData.maxValue;
+                  const label = val >= 1000000
+                    ? `${(val / 1000000).toFixed(1)}M`
+                    : val >= 1000
+                    ? `${(val / 1000).toFixed(0)}K`
+                    : val.toFixed(0);
+                  return (
+                    <g key={tick}>
+                      <line
+                        x1={barData.paddingLeft}
+                        y1={y}
+                        x2={barData.paddingLeft + barData.plotWidth}
+                        y2={y}
+                        stroke="#e2e8f0"
+                        strokeWidth="1"
+                      />
+                      <text x={barData.paddingLeft - 6} y={y + 4} fill="#94a3b8" fontSize="9" textAnchor="end">
+                        {label}
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Bars */}
+                {barData.bars.map((bar) => (
+                  <g key={bar.label} className="group">
+                    <title>RM {Number(bar.value).toFixed(2)}</title>
+                    <rect
+                      x={bar.barX}
+                      y={bar.barY}
+                      width={bar.barWidth}
+                      height={bar.barHeight}
+                      fill="url(#barGradient)"
+                      rx="3"
+                      ry="3"
+                    />
+                    <text
+                      x={bar.barX + bar.barWidth / 2}
+                      y={barData.height - barData.paddingBottom + 16}
+                      fill="#64748b"
+                      fontSize="10"
+                      textAnchor="middle"
+                    >
+                      {bar.label}
+                    </text>
+                  </g>
+                ))}
+              </svg>
+            )}
           </div>
         </div>
       </section>
