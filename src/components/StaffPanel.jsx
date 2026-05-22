@@ -181,6 +181,7 @@ export default function StaffPanel() {
               {success && (
                 <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 ring-1 ring-emerald-200">
                   {success}
+                  <p className="mt-1 text-xs">Kata laluan sementara telah dijana. Tukar kata laluan melalui panel Pengguna.</p>
                 </div>
               )}
             </form>

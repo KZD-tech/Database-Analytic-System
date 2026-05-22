@@ -575,14 +575,14 @@ app.get('/api/webhooks/logs', requireAuth('manager'), async (req, res) => {
   res.json(data || []);
 });
 
-// ─── Staff ────────────────────────────────────────────────────────────────────
+// ─── Staff (uses users table) ─────────────────────────────────────────────────
 
 function parseStaffRow(row) {
   return {
     id: row.id,
     full_name: row.full_name,
     email: row.email,
-    role: row.role || 'manager',
+    role: row.role || 'viewer',
     active: row.active !== false,
     created_at: row.created_at,
     updated_at: row.updated_at
@@ -590,7 +590,7 @@ function parseStaffRow(row) {
 }
 
 app.get('/api/staff', async (req, res) => {
-  const { data, error } = await supabase.from('staff').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('users').select('id, full_name, email, role, active, created_at, updated_at').order('created_at', { ascending: false });
   if (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -604,15 +604,25 @@ app.post('/api/staff', requireAuth('manager'), async (req, res) => {
     return res.status(400).json({ error: 'Nama dan emel diperlukan.' });
   }
 
+  const { data: existing } = await supabase.from('users').select('id').eq('email', email).maybeSingle();
+  if (existing) {
+    return res.status(400).json({ error: 'Emel sudah digunakan.' });
+  }
+
   const now = new Date().toISOString();
-  const { data, error } = await supabase.from('staff').insert([{
+  // Generate a temporary password (user should reset via admin panel)
+  const tempPassword = randomBytes(8).toString('hex');
+  const password_hash = hashPassword(tempPassword);
+
+  const { data, error } = await supabase.from('users').insert([{
     full_name,
     email,
-    role: role || 'manager',
+    password_hash,
+    role: role || 'viewer',
     active: true,
     created_at: now,
     updated_at: now
-  }]).select('*').single();
+  }]).select('id, full_name, email, role, active, created_at, updated_at').single();
 
   if (error) {
     return res.status(500).json({ error: error.message });
