@@ -283,12 +283,11 @@ export default function Dashboard({ summary, loading: appLoading }) {
       <div className="grid gap-6 xl:grid-cols-[1fr_280px]">
         {/* Bar chart */}
         <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Monthly Donation Totals</h3>
-              <p className="mt-1 text-sm text-slate-500">Donation revenue grouped by month.</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Donations</p>
+              <h3 className="mt-1 text-base font-bold text-slate-900">Monthly Totals</h3>
             </div>
-            {/* Period tabs */}
             <div className="flex items-center rounded-xl bg-slate-100 p-1 gap-0.5 self-start">
               {CHART_PERIODS.map((p) => (
                 <button
@@ -307,51 +306,45 @@ export default function Dashboard({ summary, loading: appLoading }) {
             </div>
           </div>
 
-          <div className="mt-5">
-            {chartLoading ? (
-              <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">Loading chart…</div>
-            ) : (
-              <svg viewBox={`0 0 ${barData.width} ${barData.height}`} className="w-full h-[280px]">
-                <defs>
-                  <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3b82f6" />
-                    <stop offset="100%" stopColor="#0ea5e9" />
-                  </linearGradient>
-                </defs>
-                {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
-                  const y = barData.paddingTop + (1 - tick) * barData.plotHeight;
-                  const val = tick * barData.maxValue;
-                  const lbl = val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}K` : val.toFixed(0);
-                  return (
-                    <g key={tick}>
-                      <line x1={barData.paddingLeft} y1={y} x2={barData.paddingLeft + barData.plotWidth} y2={y} stroke="#f1f5f9" strokeWidth="1" />
-                      <text x={barData.paddingLeft - 6} y={y + 4} fill="#94a3b8" fontSize="9" textAnchor="end">{lbl}</text>
-                    </g>
-                  );
-                })}
-                {barData.bars.map((bar) => (
-                  <g key={bar.label}>
-                    <title>{fmtRM(bar.value)}</title>
-                    <rect x={bar.barX} y={bar.barY} width={bar.barWidth} height={bar.barHeight} fill="url(#barGradient)" rx="4" ry="4" />
-                    <text x={bar.barX + bar.barWidth / 2} y={barData.height - barData.paddingBottom + 16} fill="#94a3b8" fontSize="10" textAnchor="middle">{bar.label}</text>
+          {chartLoading ? (
+            <div className="flex h-[260px] items-center justify-center text-sm text-slate-400">Loading…</div>
+          ) : (
+            <svg viewBox={`0 0 ${barData.width} ${barData.height}`} className="w-full h-[260px]">
+              {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
+                const y = barData.paddingTop + (1 - tick) * barData.plotHeight;
+                const val = tick * barData.maxValue;
+                const lbl = val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}K` : val.toFixed(0);
+                return (
+                  <g key={tick}>
+                    <line x1={barData.paddingLeft} y1={y} x2={barData.paddingLeft + barData.plotWidth} y2={y} stroke="#f1f5f9" strokeWidth="1" />
+                    <text x={barData.paddingLeft - 6} y={y + 4} fill="#cbd5e1" fontSize="9" textAnchor="end">{lbl}</text>
                   </g>
-                ))}
-              </svg>
-            )}
-          </div>
+                );
+              })}
+              {barData.bars.map((bar) => (
+                <g key={bar.label}>
+                  <title>{fmtRM(bar.value)}</title>
+                  <rect x={bar.barX} y={bar.barY} width={bar.barWidth} height={bar.barHeight} fill="#3b82f6" rx="4" />
+                  <text x={bar.barX + bar.barWidth / 2} y={barData.height - barData.paddingBottom + 16} fill="#94a3b8" fontSize="10" textAnchor="middle">{bar.label}</text>
+                </g>
+              ))}
+            </svg>
+          )}
         </div>
 
         {/* Donut chart */}
         <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-          <h3 className="text-base font-bold text-slate-900">Donor Status</h3>
-          <p className="mt-1 text-sm text-slate-500">Breakdown by current status.</p>
+          <div className="mb-5">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Overview</p>
+            <h3 className="mt-1 text-base font-bold text-slate-900">Donor Status</h3>
+          </div>
 
-          <div className="mt-5 flex flex-col items-center gap-4">
-            {(() => {
-              const pie = pieChartData(summary);
-              return (
-                <>
-                  <svg viewBox="0 0 220 220" className="w-full max-w-[180px]">
+          {(() => {
+            const pie = pieChartData(summary);
+            return (
+              <div className="flex flex-col gap-5">
+                <div className="flex justify-center">
+                  <svg viewBox="0 0 220 220" className="w-[160px]">
                     {pie.total === 0 ? (
                       <circle cx="110" cy="110" r="88" fill="#f1f5f9" />
                     ) : (
@@ -361,28 +354,33 @@ export default function Dashboard({ summary, loading: appLoading }) {
                         </path>
                       ))
                     )}
-                    <circle cx="110" cy="110" r="44" fill="white" />
-                    <text x="110" y="106" textAnchor="middle" fill="#0f172a" fontSize="18" fontWeight="700">{pie.total.toLocaleString('en-MY')}</text>
-                    <text x="110" y="122" textAnchor="middle" fill="#94a3b8" fontSize="9">donors</text>
+                    <circle cx="110" cy="110" r="52" fill="white" />
+                    <text x="110" y="104" textAnchor="middle" fill="#0f172a" fontSize="20" fontWeight="700">{pie.total.toLocaleString('en-MY')}</text>
+                    <text x="110" y="120" textAnchor="middle" fill="#94a3b8" fontSize="10">donors</text>
                   </svg>
-                  <div className="w-full space-y-2.5">
-                    {pie.paths.map((seg) => (
-                      <div key={seg.key} className="flex items-center justify-between gap-2 text-sm">
+                </div>
+                <div className="space-y-3">
+                  {pie.paths.map((seg) => (
+                    <div key={seg.key}>
+                      <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
-                          <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: seg.color }} />
-                          <span className="text-slate-600">{seg.label}</span>
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: seg.color }} />
+                          <span className="text-xs font-medium text-slate-600">{seg.label}</span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 text-xs">
                           <span className="font-bold text-slate-900">{seg.value.toLocaleString('en-MY')}</span>
-                          <span className="text-slate-400 text-xs w-10 text-right">{seg.percent}%</span>
+                          <span className="text-slate-400 w-8 text-right">{seg.percent}%</span>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </>
-              );
-            })()}
-          </div>
+                      <div className="h-1.5 w-full rounded-full bg-slate-100">
+                        <div className="h-1.5 rounded-full transition-all" style={{ width: `${seg.percent}%`, backgroundColor: seg.color }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
