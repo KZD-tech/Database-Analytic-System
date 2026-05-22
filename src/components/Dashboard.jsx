@@ -49,6 +49,18 @@ const monthlyDonationSeries = (orders, startDate, endDate) => {
       current = last;
       last = swap;
     }
+  } else if (orders.length > 0) {
+    // Auto-detect range from actual data
+    const validDates = orders.map((o) => parseDate(o.order_date)).filter(Boolean);
+    if (validDates.length > 0) {
+      const minMs = Math.min(...validDates.map((d) => d.getTime()));
+      const maxMs = Math.max(...validDates.map((d) => d.getTime()));
+      current = new Date(new Date(minMs).getFullYear(), new Date(minMs).getMonth(), 1);
+      last = new Date(new Date(maxMs).getFullYear(), new Date(maxMs).getMonth(), 1);
+    } else {
+      current = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      last = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
   } else {
     current = new Date(now.getFullYear(), now.getMonth() - 5, 1);
     last = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -66,6 +78,8 @@ const monthlyDonationSeries = (orders, startDate, endDate) => {
     if (!orderDate) return;
     if (start && orderDate < start) return;
     if (end && orderDate > end) return;
+    const key = orderDate.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+    if (key in totals) totals[key] += Number(order.amount || 0);
   });
 
   return months.map((month) => ({ label: month.key, value: totals[month.key] || 0 }));
