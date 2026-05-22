@@ -647,6 +647,7 @@ function parseSummaryRow(row) {
     last_purchase_date: last_date,
     ltv,
     aov,
+    highvalue: row.highvalue ?? 'Tidak',
     status: computeStatus(last_date, total_orders)
   };
 }

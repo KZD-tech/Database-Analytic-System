@@ -395,17 +395,18 @@ export default function Dashboard({ summary, orders, loading: appLoading }) {
                 <th className="px-4 py-4 font-semibold">Sumbangan pertama</th>
                 <th className="px-4 py-4 font-semibold">Sumbangan terkini</th>
                 <th className="px-4 py-4 font-semibold">Purata</th>
+                <th className="px-4 py-4 font-semibold">High Value</th>
                 <th className="px-4 py-4 font-semibold">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
               {appLoading || tableLoading ? (
                 <tr>
-                  <td colSpan="9" className="px-4 py-10 text-center text-slate-500">Memuatkan data dermawan…</td>
+                  <td colSpan="10" className="px-4 py-10 text-center text-slate-500">Memuatkan data dermawan…</td>
                 </tr>
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="px-4 py-10 text-center text-slate-500">Tiada pelanggan sepadan. Tukar penapis atau tambah pesanan baru.</td>
+                  <td colSpan="10" className="px-4 py-10 text-center text-slate-500">Tiada pelanggan sepadan. Tukar penapis atau tambah pesanan baru.</td>
                 </tr>
               ) : (
                 customers.map((customer) => (
@@ -432,6 +433,11 @@ export default function Dashboard({ summary, orders, loading: appLoading }) {
                     <td className="px-4 py-4">{customer.first_purchase_date || '—'}</td>
                     <td className="px-4 py-4">{customer.last_purchase_date || '—'}</td>
                     <td className="px-4 py-4">RM {customer.aov.toFixed(2)}</td>
+                    <td className="px-4 py-4">
+                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${customer.highvalue === 'Ya' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {customer.highvalue || 'Tidak'}
+                      </span>
+                    </td>
                     <td className="px-4 py-4">
                       <span
                         className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusBadges[customer.status] || statusBadges.new}`}
