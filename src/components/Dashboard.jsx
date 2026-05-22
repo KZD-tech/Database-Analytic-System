@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Download, Search, TrendingUp, Users, Repeat, Clock, Zap, Activity, PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getCustomers } from '../services/api';
+import { DonorGrowthChart, NewVsReturningChart, SourceDonutChart, YoyChart } from './Charts';
 
 const statusBadges = {
   active: 'bg-emerald-100 text-emerald-700',
@@ -309,6 +310,14 @@ export default function Dashboard({ summary, orders, loading: appLoading }) {
           </div>
         </div>
       </section>
+
+      {/* Advanced charts grid */}
+      <div className="grid gap-6 xl:grid-cols-2">
+        <DonorGrowthChart />
+        <NewVsReturningChart />
+        <SourceDonutChart />
+        <YoyChart />
+      </div>
 
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">

@@ -14,7 +14,7 @@ const SOURCE_COLORS = [
 ];
 
 // ── Donor Growth Line Chart ────────────────────────────────────────────────────
-function DonorGrowthChart() {
+export function DonorGrowthChart() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [months, setMonths] = useState(12);
@@ -119,7 +119,7 @@ function DonorGrowthChart() {
 }
 
 // ── New vs Returning Stacked Bar ──────────────────────────────────────────────
-function NewVsReturningChart() {
+export function NewVsReturningChart() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [months, setMonths] = useState(12);
@@ -205,7 +205,7 @@ function NewVsReturningChart() {
 }
 
 // ── Source Breakdown Donut ────────────────────────────────────────────────────
-function SourceDonutChart() {
+export function SourceDonutChart() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -285,7 +285,7 @@ function SourceDonutChart() {
 }
 
 // ── Year-over-Year Comparison ─────────────────────────────────────────────────
-function YoyChart() {
+export function YoyChart() {
   const [result, setResult] = useState({ data: [], current_year: new Date().getFullYear(), previous_year: new Date().getFullYear() - 1 });
   const [loading, setLoading] = useState(true);
 
