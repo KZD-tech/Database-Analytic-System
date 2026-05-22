@@ -17,7 +17,7 @@ const statusBadges = {
 export default function CustomerDetail() {
   const { id } = useParams();
   const [detail, setDetail] = useState(null);
-  const [profile, setProfile] = useState({ full_name: '', phone: '', email: '', source: 'other', campaign: '' });
+  const [profile, setProfile] = useState({ full_name: '', phone: '', email: '' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -29,9 +29,7 @@ export default function CustomerDetail() {
       setProfile({
         full_name: data.customer.full_name || '',
         phone: data.customer.phone || '',
-        email: data.customer.email || '',
-        source: data.customer.source || 'other',
-        campaign: data.customer.campaign || ''
+        email: data.customer.email || ''
       });
     }
     setLoading(false);
@@ -147,32 +145,6 @@ export default function CustomerDetail() {
                   />
                 </div>
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Campaign</label>
-              <input
-                name="campaign"
-                value={profile.campaign}
-                onChange={handleProfileChange}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Source</label>
-              <select
-                name="source"
-                value={profile.source}
-                onChange={handleProfileChange}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
-              >
-                <option value="facebook">Facebook</option>
-                <option value="google">Google</option>
-                <option value="youtube">YouTube</option>
-                <option value="instagram">Instagram</option>
-                <option value="tiktok">TikTok</option>
-                <option value="website">Website</option>
-                <option value="other">Other</option>
-              </select>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
               <div className="flex items-center gap-2">

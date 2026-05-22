@@ -170,12 +170,11 @@ export default function Dashboard({ summary, loading: appLoading }) {
     const data = result.customers || [];
     if (!data || data.length === 0) return;
 
-    const header = ['Nama', 'Telefon', 'Emel', 'Sumber', 'Pesanan', 'Jumlah', 'Pembelian pertama', 'Pembelian terkini', 'AOV', 'Status'];
+    const header = ['Name', 'Phone', 'Email', 'Transactions', 'Total', 'First Donation', 'Latest Donation', 'AOV', 'Status'];
     const rows = data.map((customer) => [
       customer.full_name,
       customer.phone || '',
       customer.email || '',
-      customer.source || 'Lain-lain',
       customer.total_orders,
       customer.total_spent.toFixed(2),
       customer.first_purchase_date || '',
