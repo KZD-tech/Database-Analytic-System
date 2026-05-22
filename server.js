@@ -931,44 +931,88 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 
-  const created = [];
-
-  for (let index = 0; index < records.length; index += 1) {
-    const row = records[index];
-    const lineNumber = index + 2;
-    const amount = Number(row.amount);
-
+  // Validate all rows first before touching the database
+  for (let i = 0; i < records.length; i++) {
+    const row = records[i];
+    const lineNumber = i + 2;
     if (!row.name || !row.donation_date || !row.amount) {
-      return res.status(400).json({ error: `Baris ${lineNumber} mesti mempunyai name, donation_date dan amount.` });
+      return res.status(400).json({ error: `Row ${lineNumber} must have name, donation_date and amount.` });
     }
-
-    if (Number.isNaN(amount)) {
-      return res.status(400).json({ error: `Jumlah tidak sah pada baris ${lineNumber}.` });
+    if (Number.isNaN(Number(row.amount))) {
+      return res.status(400).json({ error: `Invalid amount at row ${lineNumber}.` });
     }
-
-    const now = new Date().toISOString();
-    const { donorId, isNew, donor } = await upsertDonor({ name: row.name, phone: row.phone, email: row.email });
-
-    if (isNew) fireWebhooks('donor.created', donor);
-
-    const { data: newDonation, error: donationError } = await supabase.from('donations').insert([{
-      donor_id: donorId,
-      donation_date: row.donation_date,
-      amount,
-      source: row.source || null,
-      campaign_name: row.campaign || null,
-      created_at: now
-    }]).select('*').single();
-
-    if (donationError) {
-      return res.status(500).json({ error: donationError.message });
-    }
-
-    fireWebhooks('donation.created', newDonation);
-    created.push(row);
   }
 
-  res.json({ success: true, imported: created.length });
+  const now = new Date().toISOString();
+
+  // Step 1: Load all existing donors into memory (phone + email maps)
+  const { data: existingDonors } = await supabase.from('donors').select('id, phone, email');
+  const phoneMap = {};
+  const emailMap = {};
+  (existingDonors || []).forEach((d) => {
+    if (d.phone) phoneMap[d.phone.trim()] = d.id;
+    if (d.email) emailMap[d.email.trim().toLowerCase()] = d.id;
+  });
+
+  // Step 2: Resolve donor IDs, collect new donors to insert
+  const newDonors = [];
+  const rowDonorKeys = []; // track which key to use per row
+
+  for (const row of records) {
+    const phone = (row.phone || '').trim();
+    const email = (row.email || '').trim().toLowerCase();
+    const phoneKey = phone || null;
+    const emailKey = email || null;
+
+    if (phoneKey && phoneMap[phoneKey]) {
+      rowDonorKeys.push({ type: 'existing', id: phoneMap[phoneKey] });
+    } else if (emailKey && emailMap[emailKey]) {
+      rowDonorKeys.push({ type: 'existing', id: emailMap[emailKey] });
+    } else {
+      // Need new donor — track index into newDonors array
+      const idx = newDonors.length;
+      newDonors.push({ name: row.name || 'Unknown', phone: phoneKey || null, email: emailKey || null, created_at: now });
+      rowDonorKeys.push({ type: 'new', idx });
+      // Pre-fill maps so subsequent rows with same phone/email match this new donor
+      if (phoneKey) phoneMap[phoneKey] = `pending:${idx}`;
+      if (emailKey) emailMap[emailKey] = `pending:${idx}`;
+    }
+  }
+
+  // Step 3: Batch insert new donors in chunks of 500
+  const insertedDonors = [];
+  const CHUNK = 500;
+  for (let i = 0; i < newDonors.length; i += CHUNK) {
+    const chunk = newDonors.slice(i, i + CHUNK);
+    const { data, error } = await supabase.from('donors').insert(chunk).select('id');
+    if (error) return res.status(500).json({ error: `Insert donors: ${error.message}` });
+    insertedDonors.push(...(data || []));
+  }
+
+  // Step 4: Build final donor ID list per row
+  const donorIds = rowDonorKeys.map((k) => {
+    if (k.type === 'existing') return k.id;
+    return insertedDonors[k.idx]?.id;
+  });
+
+  // Step 5: Build donations array and batch insert in chunks of 500
+  const donationRows = records.map((row, i) => ({
+    donor_id: donorIds[i],
+    donation_date: row.donation_date,
+    amount: Number(row.amount),
+    source: row.source || null,
+    created_at: now
+  }));
+
+  let imported = 0;
+  for (let i = 0; i < donationRows.length; i += CHUNK) {
+    const chunk = donationRows.slice(i, i + CHUNK);
+    const { error } = await supabase.from('donations').insert(chunk);
+    if (error) return res.status(500).json({ error: `Insert donations: ${error.message}` });
+    imported += chunk.length;
+  }
+
+  res.json({ success: true, imported });
 });
 
 // ─── Static files ─────────────────────────────────────────────────────────────
