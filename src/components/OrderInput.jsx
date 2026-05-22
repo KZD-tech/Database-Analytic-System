@@ -20,7 +20,7 @@ export default function OrderInput({ onOrderCreated }) {
   const [uploadSuccess, setUploadSuccess] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  const csvHeaders = ['full_name', 'phone', 'email', 'order_date', 'amount', 'source', 'campaign'];
+  const csvHeaders = ['name', 'phone', 'email', 'donation_date', 'amount', 'source', 'campaign'];
 
   const formatCsvValue = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
@@ -32,7 +32,7 @@ export default function OrderInput({ onOrderCreated }) {
       '2026-05-16',
       '120.00',
       'facebook',
-      'Kempen Ramadhan'
+      'Kempen Ramadan'
     ];
     const csv = [csvHeaders.join(','), exampleRow.map(formatCsvValue).join(',')].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -338,7 +338,7 @@ export default function OrderInput({ onOrderCreated }) {
           </div>
           <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">
             <p className="font-semibold text-slate-800">Format CSV yang disokong:</p>
-            <p className="mt-2">full_name, phone, email, order_date, amount, source, campaign</p>
+            <p className="mt-2">name, phone, email, donation_date, amount, source, campaign</p>
             <p className="mt-2">Tarikh mesti dalam format <span className="font-semibold">YYYY-MM-DD</span>, jumlah dalam nombor desimal.</p>
           </div>
 
