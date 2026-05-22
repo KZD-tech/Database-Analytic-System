@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, PlusCircle, Database, Webhook, Shield, LogOut, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Users, PlusCircle, Database, Webhook, Shield, LogOut, ChevronRight, BarChart2 } from 'lucide-react';
 import { getSummary, adminLogin } from './services/api';
 import Dashboard from './components/Dashboard';
 import CustomerDetail from './components/CustomerDetail';
@@ -9,9 +9,11 @@ import StaffPanel from './components/StaffPanel';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import WebhooksPanel from './components/WebhooksPanel';
+import Analytics from './components/Analytics';
 
 const PAGE_TITLES = {
   '/': { title: 'Dashboard', breadcrumb: 'Home / Dashboard' },
+  '/analytics': { title: 'Analytics', breadcrumb: 'Home / Analytics' },
   '/order-input': { title: 'Add Donation', breadcrumb: 'Home / Add Donation' },
   '/staff': { title: 'Staff', breadcrumb: 'Home / Staff' },
   '/users': { title: 'User Management', breadcrumb: 'Home / Users' },
@@ -133,6 +135,7 @@ function App() {
             <div className="space-y-0.5">
               <NavItem to="/" icon={LayoutDashboard} label="Dashboard" active={location.pathname === '/'} />
               <NavItem to="/" icon={Users} label="Donors" active={false} />
+              <NavItem to="/analytics" icon={BarChart2} label="Analytics" active={location.pathname === '/analytics'} />
             </div>
           </div>
 
@@ -222,6 +225,14 @@ function App() {
                     onLogout={handleLogout}
                     currentUser={currentUser}
                   />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <PrivateRoute>
+                  <Analytics />
                 </PrivateRoute>
               }
             />

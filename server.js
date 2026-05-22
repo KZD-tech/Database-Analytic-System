@@ -1016,6 +1016,145 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
   res.json({ success: true, imported });
 });
 
+// ─── Top donors ──────────────────────────────────────────────────────────────
+
+app.get('/api/top-donors', async (req, res) => {
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 10));
+  const campaign = req.query.campaign || '';
+
+  if (campaign) {
+    const { data: donations, error } = await supabase
+      .from('donations').select('donor_id, amount').eq('campaign_name', campaign).limit(10000);
+    if (error) return res.status(500).json({ error: error.message });
+
+    const totals = {};
+    const counts = {};
+    (donations || []).forEach((d) => {
+      if (!d.donor_id) return;
+      totals[d.donor_id] = (totals[d.donor_id] || 0) + Number(d.amount || 0);
+      counts[d.donor_id] = (counts[d.donor_id] || 0) + 1;
+    });
+
+    const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, limit);
+    if (sorted.length === 0) return res.json([]);
+
+    const ids = sorted.map(([id]) => id);
+    const { data: donors } = await supabase.from('donors').select('id, name, email').in('id', ids);
+    const donorMap = {};
+    (donors || []).forEach((d) => { donorMap[d.id] = d; });
+
+    return res.json(sorted.map(([id, total], i) => ({
+      rank: i + 1,
+      donor_id: id,
+      full_name: donorMap[id]?.name || 'Unknown',
+      email: donorMap[id]?.email || '',
+      total_spent: Number(total.toFixed(2)),
+      total_orders: counts[id] || 0,
+    })));
+  }
+
+  const { data, error } = await supabase
+    .from('donor_summary')
+    .select('id, nama, email, jumlah_keseluruhan, kekerapan')
+    .order('jumlah_keseluruhan', { ascending: false })
+    .limit(limit);
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json((data || []).map((row, i) => ({
+    rank: i + 1,
+    donor_id: row.id,
+    full_name: row.nama || '',
+    email: row.email || '',
+    total_spent: Number(row.jumlah_keseluruhan || 0),
+    total_orders: Number(row.kekerapan || 0),
+  })));
+});
+
+// ─── Campaign list ────────────────────────────────────────────────────────────
+
+app.get('/api/campaigns', async (req, res) => {
+  const { data, error } = await supabase
+    .from('donations').select('campaign_name').not('campaign_name', 'is', null).neq('campaign_name', '').limit(2000);
+  if (error) return res.status(500).json({ error: error.message });
+  const unique = [...new Set((data || []).map((d) => d.campaign_name))].sort();
+  res.json(unique);
+});
+
+// ─── Campaign chart ───────────────────────────────────────────────────────────
+
+app.get('/api/donations/campaign-chart', async (req, res) => {
+  const { from_date, to_date } = req.query;
+
+  let query = supabase.from('donations').select('campaign_name, amount').limit(10000);
+  if (from_date) query = query.gte('donation_date', from_date);
+  if (to_date) query = query.lte('donation_date', to_date);
+
+  const { data: donations, error } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+
+  const totals = {};
+  const counts = {};
+  (donations || []).forEach((d) => {
+    const key = d.campaign_name || 'Uncategorized';
+    totals[key] = (totals[key] || 0) + Number(d.amount || 0);
+    counts[key] = (counts[key] || 0) + 1;
+  });
+
+  res.json(
+    Object.entries(totals)
+      .sort((a, b) => b[1] - a[1])
+      .map(([campaign, total]) => ({ campaign, total: Number(total.toFixed(2)), count: counts[campaign] || 0 }))
+  );
+});
+
+// ─── Monthly report ───────────────────────────────────────────────────────────
+
+app.get('/api/reports/monthly', async (req, res) => {
+  const now = new Date();
+  const rawMonth = req.query.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [year, mon] = rawMonth.split('-').map(Number);
+
+  const fromDate = `${year}-${String(mon).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, mon, 0).getDate();
+  const toDate = `${year}-${String(mon).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  const { data: donations, error } = await supabase
+    .from('donations').select('donor_id, amount, campaign_name')
+    .gte('donation_date', fromDate).lte('donation_date', toDate).limit(10000);
+  if (error) return res.status(500).json({ error: error.message });
+
+  const totalCollection = (donations || []).reduce((s, d) => s + Number(d.amount || 0), 0);
+  const totalTransactions = (donations || []).length;
+  const uniqueDonors = new Set((donations || []).map((d) => d.donor_id).filter(Boolean)).size;
+
+  const campaignMap = {};
+  (donations || []).forEach((d) => {
+    const key = d.campaign_name || 'Uncategorized';
+    if (!campaignMap[key]) campaignMap[key] = { total: 0, count: 0 };
+    campaignMap[key].total += Number(d.amount || 0);
+    campaignMap[key].count += 1;
+  });
+  const campaigns = Object.entries(campaignMap)
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([name, s]) => ({ name, total: Number(s.total.toFixed(2)), count: s.count }));
+
+  const { count: newDonors } = await supabase.from('donors')
+    .select('*', { count: 'exact', head: true })
+    .gte('created_at', `${fromDate}T00:00:00`).lte('created_at', `${toDate}T23:59:59`);
+
+  res.json({
+    month: rawMonth,
+    from_date: fromDate,
+    to_date: toDate,
+    total_collection: Number(totalCollection.toFixed(2)),
+    total_transactions: totalTransactions,
+    unique_donors: uniqueDonors,
+    new_donors: newDonors || 0,
+    avg_donation: totalTransactions > 0 ? Number((totalCollection / totalTransactions).toFixed(2)) : 0,
+    campaigns,
+  });
+});
+
 // ─── Static files ─────────────────────────────────────────────────────────────
 
 const __filename = fileURLToPath(import.meta.url);

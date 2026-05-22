@@ -98,3 +98,20 @@ export function deleteWebhook(id) {
 export function getWebhookLogs() {
   return api.get('/webhooks/logs').then((res) => res.data).catch(() => []);
 }
+
+// Analytics
+export function getTopDonors(params = {}) {
+  return api.get('/top-donors', { params }).then((res) => res.data).catch(() => []);
+}
+
+export function getCampaigns() {
+  return api.get('/campaigns').then((res) => res.data).catch(() => []);
+}
+
+export function getCampaignChart(params = {}) {
+  return api.get('/donations/campaign-chart', { params }).then((res) => res.data).catch(() => []);
+}
+
+export function getMonthlyReport(params = {}) {
+  return api.get('/reports/monthly', { params }).then((res) => res.data).catch(() => null);
+}
