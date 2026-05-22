@@ -230,12 +230,12 @@ async function upsertDonor({ name, phone, email }) {
   let existing = null;
 
   if (phone) {
-    const { data } = await supabase.from('donors').select('*').eq('phone', phone).maybeSingle();
-    existing = data || null;
+    const { data } = await supabase.from('donors').select('*').eq('phone', phone).limit(1);
+    existing = (data && data.length > 0) ? data[0] : null;
   }
   if (!existing && email) {
-    const { data } = await supabase.from('donors').select('*').eq('email', email).maybeSingle();
-    existing = data || null;
+    const { data } = await supabase.from('donors').select('*').eq('email', email).limit(1);
+    existing = (data && data.length > 0) ? data[0] : null;
   }
 
   if (existing) {
