@@ -3,6 +3,7 @@ import { Plus, User, Mail, CheckCircle2, XCircle } from 'lucide-react';
 import { createStaff, getStaff } from '../services/api';
 
 const roles = [
+  { value: 'admin', label: 'Admin' },
   { value: 'manager', label: 'Pengurus' },
   { value: 'editor', label: 'Penyunting' },
   { value: 'viewer', label: 'Pemerhati' }
