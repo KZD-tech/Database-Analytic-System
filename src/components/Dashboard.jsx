@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Download, Search, Users, Banknote, TrendingUp, Receipt, PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getCustomers, getDonationChart } from '../services/api';
+import { DonorGrowthChart, NewVsReturningChart, SourceDonutChart, YoyChart } from './Charts';
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-MY');
 const fmtRM = (n) => `RM ${Number(n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -383,6 +384,14 @@ export default function Dashboard({ summary, loading: appLoading }) {
             })()}
           </div>
         </div>
+      </div>
+
+      {/* Advanced charts */}
+      <div className="grid gap-6 xl:grid-cols-2">
+        <DonorGrowthChart />
+        <NewVsReturningChart />
+        <SourceDonutChart />
+        <YoyChart />
       </div>
 
       {/* Filter bar */}
