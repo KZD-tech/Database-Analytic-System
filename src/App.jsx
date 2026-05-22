@@ -85,7 +85,7 @@ function App() {
             style={{ background: 'linear-gradient(to bottom, #2563eb, #0284c7)' }}
           >
             <Link to="/" className="flex items-center justify-center rounded-2xl p-3 shadow-sm ring-1 ring-white/20 transition hover:bg-white/10" style={{ background: 'rgba(255,255,255,0.12)' }}>
-              <img src="/Logo-IhsanKu-02.png" alt="IhsanKu logo" className="h-14 w-auto max-w-full" />
+              <img src="/Logo%20IhsanKu.png" alt="IhsanKu logo" className="h-10 w-auto max-w-full" />
             </Link>
 
             <nav className="mt-10 space-y-1">
