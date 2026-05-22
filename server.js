@@ -810,14 +810,6 @@ app.get('/api/customers/:id', async (req, res) => {
     return res.status(500).json({ error: donationsError.message });
   }
 
-  // Fetch campaign names for all campaign_ids in this donor's donations
-  const campaignIds = [...new Set((donations || []).map((d) => d.campaign_id).filter(Boolean))];
-  let campaignMap = {};
-  if (campaignIds.length > 0) {
-    const { data: campaigns } = await supabase.from('campaigns').select('id, name');
-    (campaigns || []).forEach((c) => { campaignMap[c.id] = c.name; });
-  }
-
   const stats = buildDonationStats(donations || [])[id] || { total_orders: 0, total_spent: 0, first_purchase_date: null, last_purchase_date: null };
   const customer = parseDonorRow({ ...donorRow, ...stats });
   customer.status = computeStatus(stats.last_purchase_date, stats.total_orders);
@@ -828,7 +820,7 @@ app.get('/api/customers/:id', async (req, res) => {
       ...d,
       order_date: d.donation_date,
       customer_id: d.donor_id,
-      campaign_name: campaignMap[d.campaign_id] || null
+      campaign_name: d.campaign_name || null
     }))
   });
 });
@@ -887,7 +879,7 @@ app.get('/api/orders', async (req, res) => {
 });
 
 app.post('/api/orders', requireAuth('editor'), async (req, res) => {
-  const { customer, order_date, donation_date, amount, source } = req.body;
+  const { customer, order_date, donation_date, amount, source, campaign } = req.body;
   const finalDate = donation_date || order_date;
   if (!finalDate || !amount) {
     return res.status(400).json({ error: 'donation_date and amount are required' });
@@ -904,7 +896,8 @@ app.post('/api/orders', requireAuth('editor'), async (req, res) => {
     donor_id: donorId,
     donation_date: finalDate,
     amount: Number(amount),
-    source: source || 'manual',
+    source: source || null,
+    campaign_name: campaign || null,
     created_at: now
   }]).select('*').single();
 
@@ -1008,6 +1001,7 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
     donation_date: row.donation_date,
     amount: Number(row.amount),
     source: row.source || null,
+    campaign_name: row.campaign || null,
     created_at: now
   }));
 
