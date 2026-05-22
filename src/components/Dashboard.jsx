@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Download, Search, TrendingUp, Users, Repeat, Clock, Zap, Activity, PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getCustomers } from '../services/api';
+import { getCustomers, getDonationChart } from '../services/api';
 
 const statusBadges = {
   active: 'bg-emerald-100 text-emerald-700',
@@ -33,57 +33,6 @@ const parseDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const monthlyDonationSeries = (orders, startDate, endDate) => {
-  const start = parseDate(startDate);
-  const end = parseDate(endDate);
-  const now = new Date();
-  const months = [];
-  let current;
-  let last;
-
-  if (start && end) {
-    current = new Date(start.getFullYear(), start.getMonth(), 1);
-    last = new Date(end.getFullYear(), end.getMonth(), 1);
-    if (current > last) {
-      const swap = current;
-      current = last;
-      last = swap;
-    }
-  } else if (orders.length > 0) {
-    // Auto-detect range from actual data
-    const validDates = orders.map((o) => parseDate(o.order_date)).filter(Boolean);
-    if (validDates.length > 0) {
-      const minMs = Math.min(...validDates.map((d) => d.getTime()));
-      const maxMs = Math.max(...validDates.map((d) => d.getTime()));
-      current = new Date(new Date(minMs).getFullYear(), new Date(minMs).getMonth(), 1);
-      last = new Date(new Date(maxMs).getFullYear(), new Date(maxMs).getMonth(), 1);
-    } else {
-      current = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-      last = new Date(now.getFullYear(), now.getMonth(), 1);
-    }
-  } else {
-    current = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-    last = new Date(now.getFullYear(), now.getMonth(), 1);
-  }
-
-  while (current <= last) {
-    months.push({ key: current.toLocaleString('en-US', { month: 'short', year: 'numeric' }), value: 0 });
-    current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
-  }
-
-  const totals = Object.fromEntries(months.map((month) => [month.key, 0]));
-
-  orders.forEach((order) => {
-    const orderDate = parseDate(order.order_date);
-    if (!orderDate) return;
-    if (start && orderDate < start) return;
-    if (end && orderDate > end) return;
-    const key = orderDate.toLocaleString('en-US', { month: 'short', year: 'numeric' });
-    if (key in totals) totals[key] += Number(order.amount || 0);
-  });
-
-  return months.map((month) => ({ label: month.key, value: totals[month.key] || 0 }));
-};
 
 const buildDonationPath = (points) => {
   if (!points.length) return '';
@@ -126,7 +75,7 @@ const donationChartData = (series) => {
 
 const PER_PAGE = 50;
 
-export default function Dashboard({ summary, orders, loading: appLoading }) {
+export default function Dashboard({ summary, loading: appLoading }) {
   const navigate = useNavigate();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -138,6 +87,10 @@ export default function Dashboard({ summary, orders, loading: appLoading }) {
   // Server-side paginated state
   const [customersData, setCustomersData] = useState({ customers: [], total: 0, page: 1, per_page: PER_PAGE, total_pages: 0 });
   const [tableLoading, setTableLoading] = useState(false);
+
+  // Chart data fetched from server
+  const [chartSeries, setChartSeries] = useState([]);
+  const [chartLoading, setChartLoading] = useState(false);
 
   const fetchCustomers = useCallback(async (params) => {
     setTableLoading(true);
@@ -165,22 +118,20 @@ export default function Dashboard({ summary, orders, loading: appLoading }) {
     setPage(1);
   }, [searchQuery, statusFilter, sourceFilter, startDate, endDate]);
 
-  const start = parseDate(startDate);
-  const end = parseDate(endDate);
+  // Fetch chart data from server whenever date range changes
+  useEffect(() => {
+    setChartLoading(true);
+    const params = {};
+    if (startDate) params.from_date = startDate;
+    if (endDate) params.to_date = endDate;
+    getDonationChart(params).then((data) => {
+      setChartSeries(data || []);
+      setChartLoading(false);
+    });
+  }, [startDate, endDate]);
 
-  const ordersInRange = orders.filter((order) => {
-    const orderDate = parseDate(order.order_date);
-    if (!orderDate) return false;
-    if (start && orderDate < start) return false;
-    if (end && orderDate > end) return false;
-    return true;
-  });
-
-  const donationCount = ordersInRange.length;
-  const totalCollection = ordersInRange.reduce((sum, order) => sum + Number(order.amount || 0), 0);
-  const averageDonation = donationCount ? totalCollection / donationCount : 0;
-  const donationSeries = monthlyDonationSeries(ordersInRange, startDate, endDate);
-  const chartData = donationChartData(donationSeries);
+  const hasDateFilter = Boolean(startDate || endDate);
+  const chartData = donationChartData(chartSeries.length > 0 ? chartSeries : [{ label: '—', value: 0 }]);
 
   const formatCsvValue = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
@@ -258,10 +209,10 @@ export default function Dashboard({ summary, orders, loading: appLoading }) {
 
       <div className="grid gap-4 xl:grid-cols-4">
         {[
-          { label: 'Jumlah dermawan', value: startDate || endDate ? customers.length : summary.total, icon: Users, accent: 'bg-slate-900 text-white' },
-          { label: 'Jumlah sumbangan', value: `RM ${totalCollection.toFixed(2)}`, icon: Zap, accent: 'bg-emerald-50 text-emerald-700' },
-          { label: 'Purata sumbangan', value: `RM ${averageDonation.toFixed(2)}`, icon: TrendingUp, accent: 'bg-sky-50 text-sky-700' },
-          { label: 'Transaksi sumbangan', value: donationCount, icon: Activity, accent: 'bg-amber-50 text-amber-700' }
+          { label: 'Jumlah dermawan', value: summary.total, icon: Users, accent: 'bg-slate-900 text-white' },
+          { label: 'Jumlah sumbangan', value: `RM ${(summary.total_collection || 0).toFixed(2)}`, icon: Zap, accent: 'bg-emerald-50 text-emerald-700' },
+          { label: 'Purata sumbangan', value: `RM ${(summary.avg_order_value || 0).toFixed(2)}`, icon: TrendingUp, accent: 'bg-sky-50 text-sky-700' },
+          { label: 'Transaksi sumbangan', value: summary.total_transactions || 0, icon: Activity, accent: 'bg-amber-50 text-amber-700' }
         ].map((card) => (
           <div key={card.label} className="rounded-2xl bg-white p-5 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
             <div className="flex items-center justify-between gap-4">
@@ -284,7 +235,7 @@ export default function Dashboard({ summary, orders, loading: appLoading }) {
             <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Jumlah sumbangan bulanan</h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Graf ini menunjukkan jumlah sumbangan mengikut bulan untuk tempoh enam bulan terakhir.</p>
           </div>
-          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">Jumlah sumbangan: RM {summary.total_collection?.toFixed(2) || '0.00'}</div>
+          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">Jumlah sumbangan: RM {(summary.total_collection || 0).toFixed(2)}</div>
         </div>
 
         <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-5">

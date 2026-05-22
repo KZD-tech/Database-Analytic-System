@@ -37,6 +37,10 @@ export function getOrders() {
   return api.get('/orders').then((res) => res.data).catch(() => []);
 }
 
+export function getDonationChart(params = {}) {
+  return api.get('/donations/chart', { params }).then((res) => res.data).catch(() => []);
+}
+
 export function createOrder(order) {
   return api.post('/orders', order).then((res) => res.data);
 }

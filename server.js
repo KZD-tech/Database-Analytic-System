@@ -665,30 +665,90 @@ function parseSummaryRow(row) {
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 app.get('/api/summary', async (req, res) => {
-  const { data: summaryRows, error } = await supabase.from('donor_summary').select('*');
-  if (error) {
-    return res.status(500).json({ error: error.message });
+  // Get total donor count without fetching all rows
+  const { count: totalCount, error: countError } = await supabase
+    .from('donor_summary')
+    .select('*', { count: 'exact', head: true });
+
+  if (countError) return res.status(500).json({ error: countError.message });
+
+  // Paginate through all rows to compute accurate aggregate totals
+  let totalCollection = 0;
+  let totalTransactions = 0;
+  const statusCounts = { active: 0, repeat: 0, dormant: 0, churn: 0, new: 0 };
+  const batchSize = 1000;
+
+  for (let offset = 0; offset < (totalCount || 0); offset += batchSize) {
+    const { data: batch, error: batchError } = await supabase
+      .from('donor_summary')
+      .select('kekerapan, jumlah_keseluruhan, tarikh_sumbangan_terkini')
+      .range(offset, offset + batchSize - 1);
+
+    if (batchError) return res.status(500).json({ error: batchError.message });
+
+    (batch || []).forEach((row) => {
+      const kekerapan = Number(row.kekerapan || 0);
+      totalCollection += Number(row.jumlah_keseluruhan || 0);
+      totalTransactions += kekerapan;
+      const status = computeStatus(row.tarikh_sumbangan_terkini, kekerapan);
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
   }
 
-  let totalCollection = 0;
-  let totalDonations = 0;
-  const counts = { active: 0, repeat: 0, dormant: 0, churn: 0, new: 0 };
-
-  (summaryRows || []).forEach((row) => {
-    const parsed = parseSummaryRow(row);
-    totalCollection += parsed.total_spent;
-    totalDonations += parsed.total_orders;
-    counts[parsed.status] = (counts[parsed.status] || 0) + 1;
-  });
-
-  const avgDonationValue = totalDonations > 0 ? Number((totalCollection / totalDonations).toFixed(2)) : 0;
+  const avgDonationValue = totalTransactions > 0
+    ? Number((totalCollection / totalTransactions).toFixed(2))
+    : 0;
 
   res.json({
-    total: (summaryRows || []).length,
+    total: totalCount || 0,
     total_collection: Number(totalCollection.toFixed(2)),
+    total_transactions: totalTransactions,
     avg_order_value: avgDonationValue,
-    ...counts
+    ...statusCounts
   });
+});
+
+// ─── Donation chart (monthly aggregation) ────────────────────────────────────
+
+app.get('/api/donations/chart', async (req, res) => {
+  const { from_date, to_date } = req.query;
+
+  let countQuery = supabase.from('donations').select('*', { count: 'exact', head: true });
+  if (from_date) countQuery = countQuery.gte('donation_date', from_date);
+  if (to_date) countQuery = countQuery.lte('donation_date', to_date);
+
+  const { count: totalCount, error: countError } = await countQuery;
+  if (countError) return res.status(500).json({ error: countError.message });
+
+  const monthlyTotals = {};
+  const batchSize = 1000;
+
+  for (let offset = 0; offset < (totalCount || 0); offset += batchSize) {
+    let query = supabase
+      .from('donations')
+      .select('donation_date, amount')
+      .order('donation_date', { ascending: true })
+      .range(offset, offset + batchSize - 1);
+
+    if (from_date) query = query.gte('donation_date', from_date);
+    if (to_date) query = query.lte('donation_date', to_date);
+
+    const { data: batch, error: batchError } = await query;
+    if (batchError) return res.status(500).json({ error: batchError.message });
+
+    (batch || []).forEach((d) => {
+      if (!d.donation_date) return;
+      const date = new Date(d.donation_date);
+      const key = date.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+      monthlyTotals[key] = (monthlyTotals[key] || 0) + Number(d.amount || 0);
+    });
+  }
+
+  const entries = Object.entries(monthlyTotals).sort(
+    (a, b) => new Date(a[0]) - new Date(b[0])
+  );
+
+  res.json(entries.map(([label, value]) => ({ label, value })));
 });
 
 // ─── Customers (donors) ───────────────────────────────────────────────────────

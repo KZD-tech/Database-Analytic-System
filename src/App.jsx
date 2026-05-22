@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { Database, LayoutDashboard, PlusCircle, Users, Webhook, Shield } from 'lucide-react';
-import { getSummary, getOrders, adminLogin } from './services/api';
+import { getSummary, adminLogin } from './services/api';
 import Dashboard from './components/Dashboard';
 import CustomerDetail from './components/CustomerDetail';
 import OrderInput from './components/OrderInput';
@@ -11,8 +11,7 @@ import UserManagement from './components/UserManagement';
 import WebhooksPanel from './components/WebhooksPanel';
 
 function App() {
-  const [summary, setSummary] = useState({ total: 0, active: 0, repeat: 0, dormant: 0, churn: 0, total_collection: 0, avg_order_value: 0, donation_count: 0 });
-  const [orders, setOrders] = useState([]);
+  const [summary, setSummary] = useState({ total: 0, active: 0, repeat: 0, dormant: 0, churn: 0, total_collection: 0, total_transactions: 0, avg_order_value: 0 });
   const [loading, setLoading] = useState(false);
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem('admin_token'));
   const [currentUser, setCurrentUser] = useState(() => {
@@ -28,9 +27,8 @@ function App() {
 
   const loadData = async () => {
     setLoading(true);
-    const [summaryData, ordersData] = await Promise.all([getSummary(), getOrders()]);
+    const summaryData = await getSummary();
     setSummary(summaryData);
-    setOrders(ordersData);
     setLoading(false);
   };
 
@@ -161,7 +159,6 @@ function App() {
                 <PrivateRoute>
                   <Dashboard
                     summary={summary}
-                    orders={orders}
                     loading={loading}
                     onLogout={handleLogout}
                     currentUser={currentUser}
