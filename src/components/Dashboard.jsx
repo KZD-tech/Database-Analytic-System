@@ -337,18 +337,21 @@ export default function Dashboard({ summary, loading: appLoading }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {['all', 'new', 'active', 'repeat', 'dormant', 'churn'].map((status) => (
+            {[
+              { key: 'all',     active: 'bg-slate-900 text-white',              inactive: 'bg-slate-100 text-slate-600 hover:bg-slate-200' },
+              { key: 'new',     active: 'bg-slate-500 text-white',              inactive: 'bg-slate-100 text-slate-600 hover:bg-slate-200' },
+              { key: 'active',  active: 'bg-emerald-500 text-white',            inactive: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' },
+              { key: 'repeat',  active: 'bg-sky-500 text-white',                inactive: 'bg-sky-50 text-sky-700 hover:bg-sky-100' },
+              { key: 'dormant', active: 'bg-amber-500 text-white',              inactive: 'bg-amber-50 text-amber-700 hover:bg-amber-100' },
+              { key: 'churn',   active: 'bg-rose-500 text-white',               inactive: 'bg-rose-50 text-rose-700 hover:bg-rose-100' },
+            ].map(({ key, active, inactive }) => (
               <button
-                key={status}
+                key={key}
                 type="button"
-                onClick={() => setStatusFilter(status)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  statusFilter === status
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
+                onClick={() => setStatusFilter(key)}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${statusFilter === key ? active : inactive}`}
               >
-                {statusLabels[status]}
+                {statusLabels[key]}
               </button>
             ))}
           </div>
