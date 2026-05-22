@@ -389,7 +389,6 @@ export default function Dashboard({ summary, orders, loading: appLoading }) {
               <tr>
                 <th className="px-4 py-4 font-semibold">Dermawan</th>
                 <th className="px-4 py-4 font-semibold">Telefon</th>
-                <th className="px-4 py-4 font-semibold">Sumber</th>
                 <th className="px-4 py-4 font-semibold">Transaksi</th>
                 <th className="px-4 py-4 font-semibold">Jumlah</th>
                 <th className="px-4 py-4 font-semibold">Sumbangan pertama</th>
@@ -402,11 +401,11 @@ export default function Dashboard({ summary, orders, loading: appLoading }) {
             <tbody className="divide-y divide-slate-200 bg-white">
               {appLoading || tableLoading ? (
                 <tr>
-                  <td colSpan="10" className="px-4 py-10 text-center text-slate-500">Memuatkan data dermawan…</td>
+                  <td colSpan="9" className="px-4 py-10 text-center text-slate-500">Memuatkan data dermawan…</td>
                 </tr>
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="px-4 py-10 text-center text-slate-500">Tiada pelanggan sepadan. Tukar penapis atau tambah pesanan baru.</td>
+                  <td colSpan="9" className="px-4 py-10 text-center text-slate-500">Tiada pelanggan sepadan. Tukar penapis atau tambah pesanan baru.</td>
                 </tr>
               ) : (
                 customers.map((customer) => (
@@ -427,7 +426,6 @@ export default function Dashboard({ summary, orders, loading: appLoading }) {
                       </Link>
                     </td>
                     <td className="px-4 py-4">{customer.phone || '—'}</td>
-                    <td className="px-4 py-4 capitalize">{customer.source || 'lain-lain'}</td>
                     <td className="px-4 py-4">{customer.total_orders}</td>
                     <td className="px-4 py-4 font-semibold text-slate-900">RM {customer.total_spent.toFixed(2)}</td>
                     <td className="px-4 py-4">{customer.first_purchase_date || '—'}</td>
