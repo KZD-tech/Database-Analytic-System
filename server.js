@@ -254,6 +254,19 @@ async function upsertDonor({ name, phone, email }) {
   return { donorId: newDonor?.id, isNew: true, donor: newDonor };
 }
 
+// ─── Inbound log helper ───────────────────────────────────────────────────────
+
+async function logInbound(event) {
+  try {
+    await supabase.from('webhook_logs').insert([{
+      event,
+      status: 'success',
+      response_code: 200,
+      created_at: new Date().toISOString()
+    }]);
+  } catch { /* nullable FK — ignore if column constraint blocks it */ }
+}
+
 // ─── Outbound Webhooks ────────────────────────────────────────────────────────
 
 async function fireWebhooks(event, data) {
@@ -371,6 +384,7 @@ app.post('/api/webhooks/receive/:secret', async (req, res) => {
 
   fireWebhooks('donation.created', newDonation);
 
+  logInbound('inbound.receive');
   res.json({ success: true, donor_id: donorId, new_donor: isNew });
 });
 
@@ -400,6 +414,7 @@ app.post('/api/integrations/shopify', async (req, res) => {
 
   fireWebhooks('donation.created', newDonation);
 
+  logInbound('inbound.shopify');
   res.json({ success: true, donor_id: donorId, new_donor: isNew });
 });
 
@@ -428,6 +443,7 @@ app.post('/api/integrations/woocommerce', async (req, res) => {
 
   fireWebhooks('donation.created', newDonation);
 
+  logInbound('inbound.woocommerce');
   res.json({ success: true, donor_id: donorId, new_donor: isNew });
 });
 
@@ -456,6 +472,7 @@ app.post('/api/integrations/generic', async (req, res) => {
 
   fireWebhooks('donation.created', newDonation);
 
+  logInbound('inbound.generic');
   res.json({ success: true, donor_id: donorId, new_donor: isNew });
 });
 
@@ -1014,6 +1031,111 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
   }
 
   res.json({ success: true, imported });
+});
+
+// ─── Donor notes ─────────────────────────────────────────────────────────────
+
+app.get('/api/customers/:id/notes', async (req, res) => {
+  const { data, error } = await supabase.from('donor_notes')
+    .select('*').eq('donor_id', req.params.id).order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+app.post('/api/customers/:id/notes', requireAuth('editor'), async (req, res) => {
+  const { content } = req.body;
+  if (!content?.trim()) return res.status(400).json({ error: 'Content is required.' });
+  const { data, error } = await supabase.from('donor_notes').insert([{
+    donor_id: req.params.id,
+    content: content.trim(),
+    created_by: req.user.full_name || req.user.email || 'staff',
+    created_at: new Date().toISOString()
+  }]).select('*').single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.delete('/api/customers/:id/notes/:noteId', requireAuth('editor'), async (req, res) => {
+  const { error } = await supabase.from('donor_notes')
+    .delete().eq('id', req.params.noteId).eq('donor_id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+// ─── Duplicate detection & merge ──────────────────────────────────────────────
+
+app.get('/api/donors/duplicates', requireAuth('manager'), async (req, res) => {
+  const { data: donors, error } = await supabase
+    .from('donors').select('id, name, phone, email, created_at').limit(5000);
+  if (error) return res.status(500).json({ error: error.message });
+
+  const pairs = [];
+  const seen = new Set();
+
+  const addPair = (a, b, reason) => {
+    const key = [a.id, b.id].sort().join(':');
+    if (!seen.has(key)) { seen.add(key); pairs.push({ donor_a: a, donor_b: b, reason }); }
+  };
+
+  const phoneGroups = {};
+  const emailGroups = {};
+  const nameGroups = {};
+
+  donors.forEach((d) => {
+    if (d.phone?.trim()) {
+      const k = d.phone.trim().replace(/\D/g, '');
+      if (k.length >= 7) { if (!phoneGroups[k]) phoneGroups[k] = []; phoneGroups[k].push(d); }
+    }
+    if (d.email?.trim()) {
+      const k = d.email.trim().toLowerCase();
+      if (!emailGroups[k]) emailGroups[k] = []; emailGroups[k].push(d);
+    }
+    if (d.name?.trim()) {
+      const k = d.name.trim().toLowerCase();
+      if (!nameGroups[k]) nameGroups[k] = []; nameGroups[k].push(d);
+    }
+  });
+
+  for (const group of Object.values(phoneGroups)) {
+    for (let i = 0; i < group.length; i++) for (let j = i + 1; j < group.length; j++) addPair(group[i], group[j], 'Same phone');
+  }
+  for (const group of Object.values(emailGroups)) {
+    for (let i = 0; i < group.length; i++) for (let j = i + 1; j < group.length; j++) addPair(group[i], group[j], 'Same email');
+  }
+  for (const group of Object.values(nameGroups)) {
+    if (group.length >= 2 && group.length <= 10) {
+      for (let i = 0; i < group.length; i++) for (let j = i + 1; j < group.length; j++) addPair(group[i], group[j], 'Same name');
+    }
+  }
+
+  const allIds = [...new Set(pairs.flatMap((p) => [p.donor_a.id, p.donor_b.id]))];
+  const donationCounts = {};
+  if (allIds.length > 0) {
+    const { data: donations } = await supabase.from('donations').select('donor_id').in('donor_id', allIds);
+    (donations || []).forEach((d) => { donationCounts[d.donor_id] = (donationCounts[d.donor_id] || 0) + 1; });
+  }
+
+  res.json(pairs.slice(0, 200).map((p) => ({
+    ...p,
+    donor_a: { ...p.donor_a, full_name: p.donor_a.name, donation_count: donationCounts[p.donor_a.id] || 0 },
+    donor_b: { ...p.donor_b, full_name: p.donor_b.name, donation_count: donationCounts[p.donor_b.id] || 0 },
+  })));
+});
+
+app.post('/api/donors/merge', requireAuth('manager'), async (req, res) => {
+  const { keep_id, delete_id } = req.body;
+  if (!keep_id || !delete_id) return res.status(400).json({ error: 'keep_id and delete_id required.' });
+  if (keep_id === delete_id) return res.status(400).json({ error: 'Cannot merge a donor with itself.' });
+
+  const { error: donErr } = await supabase.from('donations').update({ donor_id: keep_id }).eq('donor_id', delete_id);
+  if (donErr) return res.status(500).json({ error: donErr.message });
+
+  await supabase.from('donor_notes').update({ donor_id: keep_id }).eq('donor_id', delete_id).catch(() => {});
+
+  const { error: delErr } = await supabase.from('donors').delete().eq('id', delete_id);
+  if (delErr) return res.status(500).json({ error: delErr.message });
+
+  res.json({ success: true });
 });
 
 // ─── Top donors ──────────────────────────────────────────────────────────────

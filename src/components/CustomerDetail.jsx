@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, CheckCircle2, Mail, Phone, RefreshCw, ShoppingBag, User } from 'lucide-react';
-import { getCustomerDetail, updateCustomer } from '../services/api';
+import { ArrowLeft, CalendarDays, CheckCircle2, Mail, Phone, RefreshCw, ShoppingBag, User, StickyNote, Trash2, Send } from 'lucide-react';
+import { getCustomerDetail, updateCustomer, getDonorNotes, addDonorNote, deleteDonorNote } from '../services/api';
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-MY');
 const fmtRM = (n) => `RM ${Number(n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -21,6 +21,9 @@ export default function CustomerDetail() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [notes, setNotes] = useState([]);
+  const [newNote, setNewNote] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
 
   const loadCustomer = async () => {
     const data = await getCustomerDetail(id);
@@ -35,9 +38,29 @@ export default function CustomerDetail() {
     setLoading(false);
   };
 
+  const loadNotes = () => getDonorNotes(id).then(setNotes);
+
   useEffect(() => {
     loadCustomer();
+    loadNotes();
   }, [id]);
+
+  const handleAddNote = async () => {
+    if (!newNote.trim()) return;
+    setNoteSaving(true);
+    try {
+      await addDonorNote(id, newNote.trim());
+      setNewNote('');
+      loadNotes();
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    await deleteDonorNote(id, noteId);
+    loadNotes();
+  };
 
   if (loading) {
     return <div className="py-10 text-center text-slate-500">Loading donor details…</div>;
@@ -195,6 +218,62 @@ export default function CustomerDetail() {
           </div>
         </section>
       </div>
+
+      {/* Notes section */}
+      <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
+        <div className="flex items-center gap-3 mb-5 text-slate-900">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50">
+            <StickyNote className="h-5 w-5 text-amber-500" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Staff Notes</p>
+            <p className="mt-1 text-sm text-slate-500">Internal remarks visible to staff only.</p>
+          </div>
+        </div>
+
+        {notes.length > 0 && (
+          <div className="mb-5 space-y-3">
+            {notes.map((note) => (
+              <div key={note.id} className="flex items-start justify-between gap-3 rounded-xl bg-amber-50 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-slate-800 whitespace-pre-wrap">{note.content}</p>
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    {note.created_by && <span className="font-medium">{note.created_by} · </span>}
+                    {note.created_at ? new Date(note.created_at).toLocaleString('en-MY') : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteNote(note.id)}
+                  className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-rose-100 hover:text-rose-600 transition"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <textarea
+            value={newNote}
+            onChange={(e) => setNewNote(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleAddNote(); }}
+            placeholder="Add a note… (Ctrl+Enter to save)"
+            rows={2}
+            className="flex-1 resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
+          />
+          <button
+            type="button"
+            onClick={handleAddNote}
+            disabled={noteSaving || !newNote.trim()}
+            className="inline-flex items-center gap-2 self-end rounded-2xl bg-amber-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
+          >
+            <Send className="h-4 w-4" />
+            {noteSaving ? 'Saving…' : 'Add'}
+          </button>
+        </div>
+      </section>
 
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

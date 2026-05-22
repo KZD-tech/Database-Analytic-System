@@ -115,3 +115,22 @@ export function getCampaignChart(params = {}) {
 export function getMonthlyReport(params = {}) {
   return api.get('/reports/monthly', { params }).then((res) => res.data).catch(() => null);
 }
+
+// Donor notes
+export function getDonorNotes(donorId) {
+  return api.get(`/customers/${donorId}/notes`).then((res) => res.data).catch(() => []);
+}
+export function addDonorNote(donorId, content) {
+  return api.post(`/customers/${donorId}/notes`, { content }).then((res) => res.data);
+}
+export function deleteDonorNote(donorId, noteId) {
+  return api.delete(`/customers/${donorId}/notes/${noteId}`).then((res) => res.data);
+}
+
+// Duplicates
+export function getDuplicates() {
+  return api.get('/donors/duplicates').then((res) => res.data).catch(() => []);
+}
+export function mergeDonors(payload) {
+  return api.post('/donors/merge', payload).then((res) => res.data);
+}
