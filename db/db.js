@@ -66,7 +66,21 @@ if (SUPABASE_URL && SUPABASE_KEY) {
       }
     ],
     webhooks: [],
-    webhook_logs: []
+    webhook_logs: [],
+    donor_summary: [
+      {
+        donor_id: 'mock-donor-1',
+        name: 'Admin Demo',
+        phone: '0123456789',
+        email: 'admin@ihsanku.local',
+        source: 'manual',
+        total_donations: 0,
+        total_amount: 0,
+        first_donation_date: null,
+        last_donation_date: null,
+        created_at: now()
+      }
+    ]
   };
 
   const cloneRow = (row) => JSON.parse(JSON.stringify(row));

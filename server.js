@@ -621,40 +621,61 @@ app.post('/api/staff', requireAuth('manager'), async (req, res) => {
   res.json(parseStaffRow(data));
 });
 
+// ─── donor_summary row mapper ─────────────────────────────────────────────────
+
+function parseSummaryRow(row) {
+  const total_orders = Number(row.total_donations ?? row.donation_count ?? row.total_orders ?? 0);
+  const total_spent = Number(row.total_amount ?? row.total_spent ?? 0);
+  const first_date = row.first_donation_date ?? row.first_purchase_date ?? null;
+  const last_date = row.last_donation_date ?? row.last_purchase_date ?? null;
+  const aov = total_orders > 0 ? Number((total_spent / total_orders).toFixed(2)) : 0;
+
+  return {
+    id: row.donor_id ?? row.id,
+    full_name: row.name ?? row.full_name ?? row.donor_name ?? '',
+    phone: row.phone ?? '',
+    email: row.email ?? '',
+    source: row.source ?? 'manual',
+    campaign: row.campaign ?? '',
+    created_at: row.created_at,
+    updated_at: row.updated_at ?? row.created_at,
+    total_orders,
+    total_spent,
+    first_purchase_date: first_date,
+    last_purchase_date: last_date,
+    ltv: total_spent,
+    aov,
+    status: computeStatus(last_date, total_orders)
+  };
+}
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 app.get('/api/summary', async (req, res) => {
-  const { data: donationRows, error: donationError } = await supabase.from('donations').select('amount, donor_id, donation_date');
-  if (donationError) {
-    return res.status(500).json({ error: donationError.message });
+  const { data: summaryRows, error } = await supabase.from('donor_summary').select('*');
+  if (error) {
+    return res.status(500).json({ error: error.message });
   }
 
-  const { data: donorRows, error: donorError } = await supabase.from('donors').select('*');
-  if (donorError) {
-    return res.status(500).json({ error: donorError.message });
-  }
+  let totalCollection = 0;
+  let totalDonations = 0;
+  const counts = { active: 0, repeat: 0, dormant: 0, churn: 0, new: 0 };
 
-  const donationStats = buildDonationStats(donationRows || []);
-  const totals = (donationRows || []).reduce((sum, d) => sum + Number(d.amount || 0), 0);
-  const avgDonationValue = donationRows && donationRows.length ? Number((totals / donationRows.length).toFixed(2)) : 0;
-
-  const summary = {
-    total: donorRows.length,
-    total_collection: Number(totals.toFixed(2)),
-    avg_order_value: avgDonationValue,
-    active: 0,
-    repeat: 0,
-    dormant: 0,
-    churn: 0
-  };
-
-  (donorRows || []).forEach((donor) => {
-    const stats = donationStats[donor.id] || { total_orders: 0, last_purchase_date: null };
-    const status = computeStatus(stats.last_purchase_date, stats.total_orders);
-    if (summary[status] !== undefined) summary[status] += 1;
+  (summaryRows || []).forEach((row) => {
+    const parsed = parseSummaryRow(row);
+    totalCollection += parsed.total_spent;
+    totalDonations += parsed.total_orders;
+    counts[parsed.status] = (counts[parsed.status] || 0) + 1;
   });
 
-  res.json(summary);
+  const avgDonationValue = totalDonations > 0 ? Number((totalCollection / totalDonations).toFixed(2)) : 0;
+
+  res.json({
+    total: (summaryRows || []).length,
+    total_collection: Number(totalCollection.toFixed(2)),
+    avg_order_value: avgDonationValue,
+    ...counts
+  });
 });
 
 // ─── Customers (donors) ───────────────────────────────────────────────────────
@@ -664,25 +685,12 @@ app.get('/api/customers', async (req, res) => {
   let page = Math.max(1, parseInt(req.query.page, 10) || 1);
   let perPage = Math.min(200, Math.max(1, parseInt(req.query.per_page, 10) || 50));
 
-  const { data: donorRows, error: donorError } = await supabase.from('donors').select('*').order('created_at', { ascending: false });
-  if (donorError) {
-    return res.status(500).json({ error: donorError.message });
+  const { data: summaryRows, error: summaryError } = await supabase.from('donor_summary').select('*');
+  if (summaryError) {
+    return res.status(500).json({ error: summaryError.message });
   }
 
-  const { data: donationRows, error: donationError } = await supabase.from('donations').select('*');
-  if (donationError) {
-    return res.status(500).json({ error: donationError.message });
-  }
-
-  const donationStats = buildDonationStats(donationRows || []);
-
-  let customers = (donorRows || []).map((row) => {
-    const stats = donationStats[row.id] || { total_orders: 0, total_spent: 0, first_purchase_date: null, last_purchase_date: null, source: 'manual' };
-    return {
-      ...parseDonorRow({ ...row, ...stats }),
-      status: computeStatus(stats.last_purchase_date, stats.total_orders)
-    };
-  });
+  let customers = (summaryRows || []).map(parseSummaryRow);
 
   if (search) {
     const q = search.toLowerCase();
