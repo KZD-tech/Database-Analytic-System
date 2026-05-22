@@ -8,3 +8,4 @@ yarn-error.log*
 scripts/donors-transformed.csv
 scripts/donors-supabase.csv
 scripts/donations-import.sql
+scripts/donors-ready.csv
