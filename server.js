@@ -956,7 +956,13 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
 
   // Step 2: Resolve donor IDs, collect new donors to insert
   const newDonors = [];
-  const rowDonorKeys = []; // track which key to use per row
+  const rowDonorKeys = [];
+
+  const resolveMapVal = (val) => {
+    if (!val) return null;
+    if (typeof val === 'number') return { type: 'new', idx: val };
+    return { type: 'existing', id: val };
+  };
 
   for (const row of records) {
     const phone = (row.phone || '').trim();
@@ -964,18 +970,19 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
     const phoneKey = phone || null;
     const emailKey = email || null;
 
-    if (phoneKey && phoneMap[phoneKey]) {
-      rowDonorKeys.push({ type: 'existing', id: phoneMap[phoneKey] });
-    } else if (emailKey && emailMap[emailKey]) {
-      rowDonorKeys.push({ type: 'existing', id: emailMap[emailKey] });
+    const fromPhone = phoneKey ? phoneMap[phoneKey] : undefined;
+    const fromEmail = emailKey ? emailMap[emailKey] : undefined;
+    const match = fromPhone !== undefined ? fromPhone : fromEmail;
+
+    if (match !== undefined) {
+      rowDonorKeys.push(resolveMapVal(match));
     } else {
-      // Need new donor — track index into newDonors array
       const idx = newDonors.length;
       newDonors.push({ name: row.name || 'Unknown', phone: phoneKey || null, email: emailKey || null, created_at: now });
       rowDonorKeys.push({ type: 'new', idx });
-      // Pre-fill maps so subsequent rows with same phone/email match this new donor
-      if (phoneKey) phoneMap[phoneKey] = `pending:${idx}`;
-      if (emailKey) emailMap[emailKey] = `pending:${idx}`;
+      // Store idx (number) so resolveMapVal knows it's a pending new donor
+      if (phoneKey) phoneMap[phoneKey] = idx;
+      if (emailKey) emailMap[emailKey] = idx;
     }
   }
 
@@ -992,7 +999,7 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
   // Step 4: Build final donor ID list per row
   const donorIds = rowDonorKeys.map((k) => {
     if (k.type === 'existing') return k.id;
-    return insertedDonors[k.idx]?.id;
+    return insertedDonors[k.idx]?.id ?? null;
   });
 
   // Step 5: Build donations array and batch insert in chunks of 500
