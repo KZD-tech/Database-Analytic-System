@@ -3,6 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Download, Search, TrendingUp, Users, Repeat, Clock, Zap, Activity, PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getCustomers, getDonationChart } from '../services/api';
 
+const fmt = (n) => Number(n || 0).toLocaleString('en-MY');
+const fmtRM = (n) => `RM ${Number(n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 const statusBadges = {
   active: 'bg-emerald-100 text-emerald-700',
   repeat: 'bg-sky-100 text-sky-700',
@@ -228,10 +231,10 @@ export default function Dashboard({ summary, loading: appLoading }) {
 
       <div className="grid gap-4 xl:grid-cols-4">
         {[
-          { label: 'Total donors', value: summary.total, icon: Users, accent: 'bg-slate-900 text-white' },
-          { label: 'Total donations', value: `RM ${(summary.total_collection || 0).toFixed(2)}`, icon: Zap, accent: 'bg-emerald-50 text-emerald-700' },
-          { label: 'Average donation', value: `RM ${(summary.avg_order_value || 0).toFixed(2)}`, icon: TrendingUp, accent: 'bg-sky-50 text-sky-700' },
-          { label: 'Donation transactions', value: summary.total_transactions || 0, icon: Activity, accent: 'bg-amber-50 text-amber-700' }
+          { label: 'Total donors', value: fmt(summary.total), icon: Users, accent: 'bg-slate-900 text-white' },
+          { label: 'Total donations', value: fmtRM(summary.total_collection), icon: Zap, accent: 'bg-emerald-50 text-emerald-700' },
+          { label: 'Average donation', value: fmtRM(summary.avg_order_value), icon: TrendingUp, accent: 'bg-sky-50 text-sky-700' },
+          { label: 'Donation transactions', value: fmt(summary.total_transactions), icon: Activity, accent: 'bg-amber-50 text-amber-700' }
         ].map((card) => (
           <div key={card.label} className="rounded-2xl bg-white p-5 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
             <div className="flex items-center justify-between gap-4">
@@ -257,7 +260,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
                 <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Monthly donation totals</h3>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">This chart shows donation totals by month.</p>
               </div>
-              <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">Total donations: RM {(summary.total_collection || 0).toFixed(2)}</div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">Total donations: {fmtRM(summary.total_collection)}</div>
             </div>
 
             <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-5">
@@ -285,7 +288,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
                     })}
                     {barData.bars.map((bar) => (
                       <g key={bar.label}>
-                        <title>RM {Number(bar.value).toFixed(2)}</title>
+                        <title>{fmtRM(bar.value)}</title>
                         <rect x={bar.barX} y={bar.barY} width={bar.barWidth} height={bar.barHeight} fill="url(#barGradient)" rx="3" ry="3" />
                         <text x={bar.barX + bar.barWidth / 2} y={barData.height - barData.paddingBottom + 16} fill="#64748b" fontSize="10" textAnchor="middle">{bar.label}</text>
                       </g>
@@ -319,7 +322,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
                         ))
                       )}
                       <circle cx="110" cy="110" r="44" fill="white" />
-                      <text x="110" y="106" textAnchor="middle" fill="#0f172a" fontSize="18" fontWeight="600">{pie.total}</text>
+                      <text x="110" y="106" textAnchor="middle" fill="#0f172a" fontSize="18" fontWeight="600">{pie.total.toLocaleString('en-MY')}</text>
                       <text x="110" y="122" textAnchor="middle" fill="#94a3b8" fontSize="9">donors</text>
                     </svg>
                     <div className="w-full space-y-2">
@@ -413,7 +416,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
           </div>
           {total > 0 ? (
             <p className="text-sm text-slate-500">
-              Showing {startIdx}–{endIdx} of {total} donors
+              Showing {fmt(startIdx)}–{fmt(endIdx)} of {fmt(total)} donors
             </p>
           ) : (
             <p className="text-sm text-slate-500">0 donors</p>
@@ -463,11 +466,11 @@ export default function Dashboard({ summary, loading: appLoading }) {
                       </Link>
                     </td>
                     <td className="px-4 py-4">{customer.phone || '—'}</td>
-                    <td className="px-4 py-4">{customer.total_orders}</td>
-                    <td className="px-4 py-4 font-semibold text-slate-900">RM {customer.total_spent.toFixed(2)}</td>
+                    <td className="px-4 py-4">{fmt(customer.total_orders)}</td>
+                    <td className="px-4 py-4 font-semibold text-slate-900">{fmtRM(customer.total_spent)}</td>
                     <td className="px-4 py-4">{customer.first_purchase_date || '—'}</td>
                     <td className="px-4 py-4">{customer.last_purchase_date || '—'}</td>
-                    <td className="px-4 py-4">RM {customer.aov.toFixed(2)}</td>
+                    <td className="px-4 py-4">{fmtRM(customer.aov)}</td>
                     <td className="px-4 py-4">
                       <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${customer.highvalue === 'Ya' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
                         {customer.highvalue || 'Tidak'}

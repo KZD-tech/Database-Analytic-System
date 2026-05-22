@@ -3,6 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, CalendarDays, CheckCircle2, Mail, Phone, RefreshCw, ShoppingBag, User } from 'lucide-react';
 import { getCustomerDetail, updateCustomer } from '../services/api';
 
+const fmt = (n) => Number(n || 0).toLocaleString('en-MY');
+const fmtRM = (n) => `RM ${Number(n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 const statusBadges = {
   active: 'bg-emerald-100 text-emerald-700',
   repeat: 'bg-sky-100 text-sky-700',
@@ -203,19 +206,19 @@ export default function CustomerDetail() {
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             <div className="rounded-xl bg-slate-50 p-5">
               <p className="text-sm text-slate-500">Total orders</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">{customer.total_orders}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950">{fmt(customer.total_orders)}</p>
             </div>
             <div className="rounded-xl bg-slate-50 p-5">
               <p className="text-sm text-slate-500">Total spent</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">RM {customer.total_spent.toFixed(2)}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950">{fmtRM(customer.total_spent)}</p>
             </div>
             <div className="rounded-xl bg-slate-50 p-5">
               <p className="text-sm text-slate-500">Average order value</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">RM {customer.aov.toFixed(2)}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950">{fmtRM(customer.aov)}</p>
             </div>
             <div className="rounded-xl bg-slate-50 p-5">
               <p className="text-sm text-slate-500">Lifetime value</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">RM {customer.ltv.toFixed(2)}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950">{fmtRM(customer.ltv)}</p>
             </div>
           </div>
         </section>
@@ -248,7 +251,7 @@ export default function CustomerDetail() {
                 {orders.map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50">
                     <td className="px-4 py-4">{order.order_date || order.donation_date || '—'}</td>
-                    <td className="px-4 py-4 font-semibold text-slate-900">RM {Number(order.amount || 0).toFixed(2)}</td>
+                    <td className="px-4 py-4 font-semibold text-slate-900">{fmtRM(order.amount)}</td>
                     <td className="px-4 py-4 capitalize">{order.source || '—'}</td>
                     <td className="px-4 py-4">{order.campaign_name || '—'}</td>
                     <td className="px-4 py-4 text-slate-500">
