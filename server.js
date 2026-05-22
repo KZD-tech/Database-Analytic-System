@@ -245,8 +245,8 @@ async function upsertDonor({ name, phone, email }) {
   const now = new Date().toISOString();
   const { data: newDonor } = await supabase.from('donors').insert([{
     name: name || 'Unknown',
-    phone: phone || '',
-    email: email || '',
+    phone: phone || null,
+    email: email || null,
     created_at: now
   }]).select('*').single();
 
@@ -954,7 +954,8 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
       donor_id: donorId,
       donation_date: row.donation_date,
       amount,
-      source: row.source || 'manual',
+      source: row.source || null,
+      campaign_name: row.campaign || null,
       created_at: now
     }]).select('*').single();
 
