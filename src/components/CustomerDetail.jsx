@@ -224,30 +224,42 @@ export default function CustomerDetail() {
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Sejarah pesanan</p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-950">Pesanan terkini</h2>
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Sejarah sumbangan</p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-950">Sumbangan terkini</h2>
           </div>
-          <p className="text-sm text-slate-500">{orders.length} pesanan</p>
+          <p className="text-sm text-slate-500">{orders.length} sumbangan</p>
         </div>
 
         {orders.length === 0 ? (
-          <div className="mt-6 rounded-xl bg-slate-50 p-6 text-slate-600">Tiada pesanan untuk pelanggan ini.</div>
+          <div className="mt-6 rounded-xl bg-slate-50 p-6 text-slate-600">Tiada sumbangan untuk dermawan ini.</div>
         ) : (
-          <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
+          <div className="mt-6 overflow-x-auto overflow-hidden rounded-xl border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm text-slate-600">
               <thead className="bg-slate-50 text-slate-700">
                 <tr>
-                  <th className="px-4 py-4 font-semibold">Tarikh</th>
+                  <th className="px-4 py-4 font-semibold">ID</th>
+                  <th className="px-4 py-4 font-semibold">Tarikh Sumbangan</th>
                   <th className="px-4 py-4 font-semibold">Jumlah</th>
                   <th className="px-4 py-4 font-semibold">Sumber</th>
+                  <th className="px-4 py-4 font-semibold">ID Kempen</th>
+                  <th className="px-4 py-4 font-semibold">Dicipta Pada</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {orders.map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-4">{order.order_date}</td>
-                    <td className="px-4 py-4">RM {order.amount.toFixed(2)}</td>
-                    <td className="px-4 py-4">{order.source || 'lain-lain'}</td>
+                    <td className="px-4 py-4 font-mono text-xs text-slate-400" title={order.id}>
+                      {order.id ? `…${String(order.id).slice(-8)}` : '—'}
+                    </td>
+                    <td className="px-4 py-4">{order.order_date || order.donation_date || '—'}</td>
+                    <td className="px-4 py-4 font-semibold text-slate-900">RM {Number(order.amount || 0).toFixed(2)}</td>
+                    <td className="px-4 py-4 capitalize">{order.source || '—'}</td>
+                    <td className="px-4 py-4 font-mono text-xs text-slate-400" title={order.campaign_id}>
+                      {order.campaign_id ? `…${String(order.campaign_id).slice(-8)}` : '—'}
+                    </td>
+                    <td className="px-4 py-4 text-slate-500">
+                      {order.created_at ? new Date(order.created_at).toLocaleDateString('ms-MY') : '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
