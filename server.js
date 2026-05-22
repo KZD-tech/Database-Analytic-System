@@ -752,11 +752,27 @@ app.get('/api/customers/:id', async (req, res) => {
     return res.status(500).json({ error: donationsError.message });
   }
 
+  // Fetch campaign names for all campaign_ids in this donor's donations
+  const campaignIds = [...new Set((donations || []).map((d) => d.campaign_id).filter(Boolean))];
+  let campaignMap = {};
+  if (campaignIds.length > 0) {
+    const { data: campaigns } = await supabase.from('campaigns').select('id, name');
+    (campaigns || []).forEach((c) => { campaignMap[c.id] = c.name; });
+  }
+
   const stats = buildDonationStats(donations || [])[id] || { total_orders: 0, total_spent: 0, first_purchase_date: null, last_purchase_date: null };
   const customer = parseDonorRow({ ...donorRow, ...stats });
   customer.status = computeStatus(stats.last_purchase_date, stats.total_orders);
 
-  res.json({ customer, orders: (donations || []).map((d) => ({ ...d, order_date: d.donation_date, customer_id: d.donor_id })) });
+  res.json({
+    customer,
+    orders: (donations || []).map((d) => ({
+      ...d,
+      order_date: d.donation_date,
+      customer_id: d.donor_id,
+      campaign_name: campaignMap[d.campaign_id] || null
+    }))
+  });
 });
 
 app.put('/api/customers/:id', requireAuth('editor'), async (req, res) => {

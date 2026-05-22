@@ -237,26 +237,20 @@ export default function CustomerDetail() {
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm text-slate-600">
               <thead className="bg-slate-50 text-slate-700">
                 <tr>
-                  <th className="px-4 py-4 font-semibold">ID</th>
                   <th className="px-4 py-4 font-semibold">Tarikh Sumbangan</th>
                   <th className="px-4 py-4 font-semibold">Jumlah</th>
                   <th className="px-4 py-4 font-semibold">Sumber</th>
-                  <th className="px-4 py-4 font-semibold">ID Kempen</th>
+                  <th className="px-4 py-4 font-semibold">Kempen</th>
                   <th className="px-4 py-4 font-semibold">Dicipta Pada</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {orders.map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-4 font-mono text-xs text-slate-400" title={order.id}>
-                      {order.id ? `…${String(order.id).slice(-8)}` : '—'}
-                    </td>
                     <td className="px-4 py-4">{order.order_date || order.donation_date || '—'}</td>
                     <td className="px-4 py-4 font-semibold text-slate-900">RM {Number(order.amount || 0).toFixed(2)}</td>
                     <td className="px-4 py-4 capitalize">{order.source || '—'}</td>
-                    <td className="px-4 py-4 font-mono text-xs text-slate-400" title={order.campaign_id}>
-                      {order.campaign_id ? `…${String(order.campaign_id).slice(-8)}` : '—'}
-                    </td>
+                    <td className="px-4 py-4">{order.campaign_name || '—'}</td>
                     <td className="px-4 py-4 text-slate-500">
                       {order.created_at ? new Date(order.created_at).toLocaleDateString('ms-MY') : '—'}
                     </td>
