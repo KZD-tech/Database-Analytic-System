@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router-dom';
-import { Database, LayoutDashboard, PlusCircle, Users, Webhook, Shield } from 'lucide-react';
-import { getSummary, getOrders, adminLogin } from './services/api';
+import { LayoutDashboard, Users, PlusCircle, Database, Webhook, Shield, LogOut, ChevronRight, BarChart2, GitMerge, LineChart } from 'lucide-react';
+import { getSummary, adminLogin } from './services/api';
 import Dashboard from './components/Dashboard';
 import CustomerDetail from './components/CustomerDetail';
 import OrderInput from './components/OrderInput';
@@ -9,10 +9,39 @@ import StaffPanel from './components/StaffPanel';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import WebhooksPanel from './components/WebhooksPanel';
+import Analytics from './components/Analytics';
+import Charts from './components/Charts';
+import Duplicates from './components/Duplicates';
+
+const PAGE_TITLES = {
+  '/': { title: 'Dashboard', breadcrumb: 'Home / Dashboard' },
+  '/analytics': { title: 'Analytics', breadcrumb: 'Home / Analytics' },
+  '/charts': { title: 'Charts', breadcrumb: 'Home / Charts' },
+  '/duplicates': { title: 'Duplicate Donors', breadcrumb: 'Home / Duplicate Donors' },
+  '/order-input': { title: 'Add Donation', breadcrumb: 'Home / Add Donation' },
+  '/staff': { title: 'Staff', breadcrumb: 'Home / Staff' },
+  '/users': { title: 'User Management', breadcrumb: 'Home / Users' },
+  '/webhooks': { title: 'Webhooks', breadcrumb: 'Home / Webhooks' },
+};
+
+function NavItem({ to, icon: Icon, label, active }) {
+  return (
+    <Link
+      to={to}
+      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+        active
+          ? 'bg-blue-50 text-blue-700'
+          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+      }`}
+    >
+      <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-blue-600' : 'text-slate-400'}`} />
+      {label}
+    </Link>
+  );
+}
 
 function App() {
-  const [summary, setSummary] = useState({ total: 0, active: 0, repeat: 0, dormant: 0, churn: 0, total_collection: 0, avg_order_value: 0, donation_count: 0 });
-  const [orders, setOrders] = useState([]);
+  const [summary, setSummary] = useState({ total: 0, new: 0, active: 0, repeat: 0, dormant: 0, churn: 0, total_collection: 0, total_transactions: 0, avg_order_value: 0 });
   const [loading, setLoading] = useState(false);
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem('admin_token'));
   const [currentUser, setCurrentUser] = useState(() => {
@@ -28,9 +57,8 @@ function App() {
 
   const loadData = async () => {
     setLoading(true);
-    const [summaryData, ordersData] = await Promise.all([getSummary(), getOrders()]);
+    const summaryData = await getSummary();
     setSummary(summaryData);
-    setOrders(ordersData);
     setLoading(false);
   };
 
@@ -78,94 +106,155 @@ function App() {
     return children;
   };
 
+  const pageInfo = PAGE_TITLES[location.pathname] || { title: 'IhsanKu', breadcrumb: 'Home' };
+  const isCustomerRoute = location.pathname.startsWith('/customer/');
+
+  if (isLoginRoute) {
+    return (
+      <div className="min-h-screen bg-slate-100">
+        <Routes>
+          <Route path="/login" element={adminToken ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </div>
+    );
+  }
+
   return (
-    <div className="app-shell min-h-screen bg-slate-50 text-slate-900">
-      <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col gap-6 px-4 py-6 lg:flex-row lg:px-8">
-          {!isLoginRoute && (
-          <aside className="hidden w-full shrink-0 rounded-2xl border border-slate-800/50 bg-slate-950/95 p-6 text-slate-200 shadow-xl shadow-slate-950/10 lg:block lg:w-72">
-            <Link to="/" className="flex items-center justify-center rounded-2xl bg-slate-900/80 p-3 shadow-sm ring-1 ring-slate-700 transition hover:bg-slate-800">
-              <img src="/Logo-IhsanKu-02.png" alt="IhsanKu logo" className="h-14 w-auto max-w-full" />
-            </Link>
+    <div className="flex min-h-screen bg-slate-100">
+      {/* Sidebar */}
+      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white border-r border-slate-200 z-30">
+        {/* Logo */}
+        <div className="flex items-center justify-center px-6 py-5 border-b border-slate-100">
+          <Link to="/">
+            <img src="/Logo%20IhsanKu.png" alt="IhsanKu" className="h-10 w-auto max-w-full" />
+          </Link>
+        </div>
 
-            <nav className="mt-10 space-y-2">
-              <Link
-                to="/"
-                className="flex items-center gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:bg-slate-800"
-              >
-                <LayoutDashboard className="h-4 w-4 text-slate-300" />
-                Laman Utama
-              </Link>
-              <Link
-                to="/"
-                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
-              >
-                <Users className="h-4 w-4 text-slate-300" />
-                Dermawan
-              </Link>
-              <Link
-                to="/staff"
-                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
-              >
-                <Database className="h-4 w-4 text-slate-300" />
-                Staf
-              </Link>
-              {isManagerOrAbove && (
-                <Link
-                  to="/webhooks"
-                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
-                >
-                  <Webhook className="h-4 w-4 text-slate-300" />
-                  Webhooks
-                </Link>
-              )}
-              {isAdmin && (
-                <Link
-                  to="/users"
-                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
-                >
-                  <Shield className="h-4 w-4 text-slate-300" />
-                  Pengguna
-                </Link>
-              )}
-            </nav>
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
+          {/* GENERAL */}
+          <div>
+            <p className="px-3 mb-2 text-[10px] font-bold tracking-[0.18em] uppercase text-slate-400">General</p>
+            <div className="space-y-0.5">
+              <NavItem to="/" icon={LayoutDashboard} label="Dashboard" active={location.pathname === '/'} />
+              <NavItem to="/" icon={Users} label="Donors" active={false} />
+              <NavItem to="/analytics" icon={BarChart2} label="Analytics" active={location.pathname === '/analytics'} />
+              <NavItem to="/charts" icon={LineChart} label="Charts" active={location.pathname === '/charts'} />
+            </div>
+          </div>
 
-            {adminToken && (
-              <div className="mt-8 border-t border-slate-700 pt-4">
-                {currentUser && (
-                  <div className="mb-3 px-2">
-                    <p className="text-xs text-slate-400 truncate">{currentUser.full_name || currentUser.email}</p>
-                    <p className="text-xs text-slate-500 capitalize">{currentUser.role || 'admin'}</p>
-                  </div>
+          {/* MANAGEMENT */}
+          <div>
+            <p className="px-3 mb-2 text-[10px] font-bold tracking-[0.18em] uppercase text-slate-400">Management</p>
+            <div className="space-y-0.5">
+              <NavItem to="/order-input" icon={PlusCircle} label="Add Donation" active={location.pathname === '/order-input'} />
+              <NavItem to="/staff" icon={Database} label="Staff" active={location.pathname === '/staff'} />
+              <NavItem to="/duplicates" icon={GitMerge} label="Duplicates" active={location.pathname === '/duplicates'} />
+            </div>
+          </div>
+
+          {/* ADMIN */}
+          {(isManagerOrAbove || isAdmin) && (
+            <div>
+              <p className="px-3 mb-2 text-[10px] font-bold tracking-[0.18em] uppercase text-slate-400">Admin</p>
+              <div className="space-y-0.5">
+                {isManagerOrAbove && (
+                  <NavItem to="/webhooks" icon={Webhook} label="Webhooks" active={location.pathname === '/webhooks'} />
                 )}
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                >
-                  Log keluar
-                </button>
+                {isAdmin && (
+                  <NavItem to="/users" icon={Shield} label="Users" active={location.pathname === '/users'} />
+                )}
+              </div>
+            </div>
+          )}
+        </nav>
+
+        {/* User / logout */}
+        {adminToken && (
+          <div className="px-4 py-4 border-t border-slate-100">
+            {currentUser && (
+              <div className="mb-3 px-3">
+                <p className="text-sm font-semibold text-slate-800 truncate">{currentUser.full_name || currentUser.email}</p>
+                <p className="text-xs text-slate-400 capitalize">{currentUser.role || 'admin'}</p>
               </div>
             )}
-          </aside>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+            >
+              <LogOut className="h-4 w-4 text-slate-400" />
+              Log out
+            </button>
+          </div>
         )}
+      </aside>
 
-        <div className="flex-1">
+      {/* Main content */}
+      <div className="flex-1 lg:ml-64 flex flex-col min-h-screen">
+        {/* Top header */}
+        <header className="bg-white border-b border-slate-200 px-6 py-4 lg:px-8 flex items-center justify-between sticky top-0 z-20">
+          <div>
+            <h1 className="text-lg font-bold text-slate-900">
+              {isCustomerRoute ? 'Donor Details' : pageInfo.title}
+            </h1>
+            <div className="flex items-center gap-1 mt-0.5 text-xs text-slate-400">
+              <span>Home</span>
+              <ChevronRight className="h-3 w-3" />
+              <span className="text-slate-600">{isCustomerRoute ? 'Donor Details' : pageInfo.title}</span>
+            </div>
+          </div>
+          {currentUser && (
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex flex-col items-end">
+                <p className="text-sm font-semibold text-slate-800">{currentUser.full_name || currentUser.email}</p>
+                <p className="text-xs text-slate-400 capitalize">{currentUser.role || 'admin'}</p>
+              </div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+                {(currentUser.full_name || currentUser.email || 'U').charAt(0).toUpperCase()}
+              </div>
+            </div>
+          )}
+        </header>
+
+        {/* Page content */}
+        <main className="flex-1 p-6 lg:p-8">
           <Routes>
-            <Route
-              path="/login"
-              element={adminToken ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />}
-            />
             <Route
               path="/"
               element={
                 <PrivateRoute>
                   <Dashboard
                     summary={summary}
-                    orders={orders}
                     loading={loading}
                     onLogout={handleLogout}
                     currentUser={currentUser}
                   />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/charts"
+              element={
+                <PrivateRoute>
+                  <Charts />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/duplicates"
+              element={
+                <PrivateRoute minRole="manager">
+                  <Duplicates />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <PrivateRoute>
+                  <Analytics />
                 </PrivateRoute>
               }
             />
@@ -211,7 +300,7 @@ function App() {
             />
             <Route path="*" element={<Navigate to={adminToken ? '/' : '/login'} replace />} />
           </Routes>
-        </div>
+        </main>
       </div>
     </div>
   );

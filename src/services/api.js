@@ -37,6 +37,10 @@ export function getOrders() {
   return api.get('/orders').then((res) => res.data).catch(() => []);
 }
 
+export function getDonationChart(params = {}) {
+  return api.get('/donations/chart', { params }).then((res) => res.data).catch(() => []);
+}
+
 export function createOrder(order) {
   return api.post('/orders', order).then((res) => res.data);
 }
@@ -93,4 +97,54 @@ export function deleteWebhook(id) {
 
 export function getWebhookLogs() {
   return api.get('/webhooks/logs').then((res) => res.data).catch(() => []);
+}
+
+// Analytics
+export function getTopDonors(params = {}) {
+  return api.get('/top-donors', { params }).then((res) => res.data).catch(() => []);
+}
+
+export function getCampaigns() {
+  return api.get('/campaigns').then((res) => res.data).catch(() => []);
+}
+
+export function getCampaignChart(params = {}) {
+  return api.get('/donations/campaign-chart', { params }).then((res) => res.data).catch(() => []);
+}
+
+export function getMonthlyReport(params = {}) {
+  return api.get('/reports/monthly', { params }).then((res) => res.data).catch(() => null);
+}
+
+// Donor notes
+export function getDonorNotes(donorId) {
+  return api.get(`/customers/${donorId}/notes`).then((res) => res.data).catch(() => []);
+}
+export function addDonorNote(donorId, content) {
+  return api.post(`/customers/${donorId}/notes`, { content }).then((res) => res.data);
+}
+export function deleteDonorNote(donorId, noteId) {
+  return api.delete(`/customers/${donorId}/notes/${noteId}`).then((res) => res.data);
+}
+
+// Charts
+export function getDonorGrowthChart(params = {}) {
+  return api.get('/charts/donor-growth', { params }).then((res) => res.data).catch(() => []);
+}
+export function getNewVsReturningChart(params = {}) {
+  return api.get('/charts/new-vs-returning', { params }).then((res) => res.data).catch(() => []);
+}
+export function getSourceBreakdown() {
+  return api.get('/charts/source-breakdown').then((res) => res.data).catch(() => []);
+}
+export function getYoyComparison() {
+  return api.get('/charts/yoy-comparison').then((res) => res.data).catch(() => ({ data: [], current_year: new Date().getFullYear(), previous_year: new Date().getFullYear() - 1 }));
+}
+
+// Duplicates
+export function getDuplicates() {
+  return api.get('/donors/duplicates').then((res) => res.data).catch(() => []);
+}
+export function mergeDonors(payload) {
+  return api.post('/donors/merge', payload).then((res) => res.data);
 }
