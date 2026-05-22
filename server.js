@@ -698,45 +698,42 @@ app.get('/api/customers', async (req, res) => {
   let page = Math.max(1, parseInt(req.query.page, 10) || 1);
   let perPage = Math.min(200, Math.max(1, parseInt(req.query.per_page, 10) || 50));
 
-  const { data: summaryRows, error: summaryError } = await supabase.from('donor_summary').select('*');
+  // Build query with filters pushed to Supabase
+  let query = supabase.from('donor_summary').select('*', { count: 'exact' });
+
+  if (search) {
+    query = query.or(`nama.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+  }
+
+  if (from_date) {
+    query = query.gte('tarikh_sumbangan_terkini', from_date);
+  }
+
+  if (to_date) {
+    query = query.lte('tarikh_sumbangan_terkini', to_date);
+  }
+
+  // Apply DB-level pagination
+  const rangeStart = (page - 1) * perPage;
+  const rangeEnd = rangeStart + perPage - 1;
+  query = query.range(rangeStart, rangeEnd);
+
+  const { data: summaryRows, count, error: summaryError } = await query;
   if (summaryError) {
     return res.status(500).json({ error: summaryError.message });
   }
 
   let customers = (summaryRows || []).map(parseSummaryRow);
 
-  if (search) {
-    const q = search.toLowerCase();
-    customers = customers.filter((c) =>
-      (c.full_name || '').toLowerCase().includes(q) ||
-      (c.email || '').toLowerCase().includes(q) ||
-      (c.phone || '').toLowerCase().includes(q)
-    );
-  }
-
+  // Status filter is computed (not stored), apply client-side on current page
   if (status && status !== 'all') {
     customers = customers.filter((c) => c.status === status);
   }
 
-  if (source && source !== 'all') {
-    customers = customers.filter((c) => (c.source || 'other') === source);
-  }
-
-  if (from_date) {
-    customers = customers.filter((c) => c.last_purchase_date && c.last_purchase_date >= from_date);
-  }
-
-  if (to_date) {
-    customers = customers.filter((c) => c.last_purchase_date && c.last_purchase_date <= to_date);
-  }
-
-  const total = customers.length;
+  const total = count || 0;
   const totalPages = Math.ceil(total / perPage) || 1;
-  page = Math.min(page, totalPages);
-  const start = (page - 1) * perPage;
-  const paged = customers.slice(start, start + perPage);
 
-  res.json({ customers: paged, total, page, per_page: perPage, total_pages: totalPages });
+  res.json({ customers, total, page, per_page: perPage, total_pages: totalPages });
 });
 
 app.get('/api/customers/:id', async (req, res) => {
