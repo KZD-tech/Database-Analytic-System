@@ -624,15 +624,17 @@ app.post('/api/staff', requireAuth('manager'), async (req, res) => {
 // ─── donor_summary row mapper ─────────────────────────────────────────────────
 
 function parseSummaryRow(row) {
-  const total_orders = Number(row.total_donations ?? row.donation_count ?? row.total_orders ?? 0);
-  const total_spent = Number(row.total_amount ?? row.total_spent ?? 0);
-  const first_date = row.first_donation_date ?? row.first_purchase_date ?? null;
-  const last_date = row.last_donation_date ?? row.last_purchase_date ?? null;
-  const aov = total_orders > 0 ? Number((total_spent / total_orders).toFixed(2)) : 0;
+  // Column names from Supabase donor_summary table
+  const total_orders = Number(row.kekerapan ?? row.total_donations ?? row.donation_count ?? 0);
+  const total_spent = Number(row.jumlah_keseluruhan ?? row.total_amount ?? row.total_spent ?? 0);
+  const first_date = row.tarikh_sumbangan_terdahulu ?? row.first_donation_date ?? null;
+  const last_date = row.tarikh_sumbangan_terkini ?? row.last_donation_date ?? null;
+  const aov = Number(row.aov ?? (total_orders > 0 ? (total_spent / total_orders).toFixed(2) : 0));
+  const ltv = Number(row.ltv ?? total_spent);
 
   return {
-    id: row.donor_id ?? row.id,
-    full_name: row.name ?? row.full_name ?? row.donor_name ?? '',
+    id: row.id ?? row.donor_id,
+    full_name: row.nama ?? row.name ?? row.full_name ?? '',
     phone: row.phone ?? '',
     email: row.email ?? '',
     source: row.source ?? 'manual',
@@ -643,7 +645,7 @@ function parseSummaryRow(row) {
     total_spent,
     first_purchase_date: first_date,
     last_purchase_date: last_date,
-    ltv: total_spent,
+    ltv,
     aov,
     status: computeStatus(last_date, total_orders)
   };
