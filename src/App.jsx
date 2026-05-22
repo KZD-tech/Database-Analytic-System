@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, PlusCircle, Database, Webhook, Shield, LogOut, ChevronRight, BarChart2, GitMerge } from 'lucide-react';
+import { LayoutDashboard, Users, PlusCircle, Database, Webhook, Shield, LogOut, ChevronRight, BarChart2, GitMerge, LineChart } from 'lucide-react';
 import { getSummary, adminLogin } from './services/api';
 import Dashboard from './components/Dashboard';
 import CustomerDetail from './components/CustomerDetail';
@@ -10,6 +10,7 @@ import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import WebhooksPanel from './components/WebhooksPanel';
 import Analytics from './components/Analytics';
+import Charts from './components/Charts';
 import Duplicates from './components/Duplicates';
 
 const PAGE_TITLES = {
@@ -20,6 +21,7 @@ const PAGE_TITLES = {
   '/staff': { title: 'Staff', breadcrumb: 'Home / Staff' },
   '/users': { title: 'User Management', breadcrumb: 'Home / Users' },
   '/webhooks': { title: 'Webhooks', breadcrumb: 'Home / Webhooks' },
+  '/charts': { title: 'Charts', breadcrumb: 'Home / Charts' },
 };
 
 function NavItem({ to, icon: Icon, label, active }) {
@@ -138,6 +140,7 @@ function App() {
               <NavItem to="/" icon={LayoutDashboard} label="Dashboard" active={location.pathname === '/'} />
               <NavItem to="/" icon={Users} label="Donors" active={false} />
               <NavItem to="/analytics" icon={BarChart2} label="Analytics" active={location.pathname === '/analytics'} />
+              <NavItem to="/charts" icon={LineChart} label="Charts" active={location.pathname === '/charts'} />
             </div>
           </div>
 
@@ -228,6 +231,14 @@ function App() {
                     onLogout={handleLogout}
                     currentUser={currentUser}
                   />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/charts"
+              element={
+                <PrivateRoute>
+                  <Charts />
                 </PrivateRoute>
               }
             />

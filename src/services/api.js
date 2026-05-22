@@ -127,6 +127,20 @@ export function deleteDonorNote(donorId, noteId) {
   return api.delete(`/customers/${donorId}/notes/${noteId}`).then((res) => res.data);
 }
 
+// Charts
+export function getDonorGrowthChart(params = {}) {
+  return api.get('/charts/donor-growth', { params }).then((res) => res.data).catch(() => []);
+}
+export function getNewVsReturningChart(params = {}) {
+  return api.get('/charts/new-vs-returning', { params }).then((res) => res.data).catch(() => []);
+}
+export function getSourceBreakdown() {
+  return api.get('/charts/source-breakdown').then((res) => res.data).catch(() => []);
+}
+export function getYoyComparison() {
+  return api.get('/charts/yoy-comparison').then((res) => res.data).catch(() => ({ data: [], current_year: new Date().getFullYear(), previous_year: new Date().getFullYear() - 1 }));
+}
+
 // Duplicates
 export function getDuplicates() {
   return api.get('/donors/duplicates').then((res) => res.data).catch(() => []);
