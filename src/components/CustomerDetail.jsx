@@ -39,11 +39,11 @@ export default function CustomerDetail() {
   }, [id]);
 
   if (loading) {
-    return <div className="py-10 text-center text-slate-500">Memuatkan butiran pelanggan…</div>;
+    return <div className="py-10 text-center text-slate-500">Loading donor details…</div>;
   }
 
   if (!detail) {
-    return <div className="py-10 text-center text-slate-500">Pelanggan tidak dijumpai.</div>;
+    return <div className="py-10 text-center text-slate-500">Donor not found.</div>;
   }
 
   const { customer, orders } = detail;
@@ -58,10 +58,10 @@ export default function CustomerDetail() {
     setMessage('');
     try {
       await updateCustomer(id, profile);
-      setMessage('Profil pelanggan berjaya dikemaskini.');
+      setMessage('Donor profile updated successfully.');
       loadCustomer();
     } catch (error) {
-      setMessage('Tidak dapat menyimpan profil pelanggan.');
+      setMessage('Unable to save donor profile.');
     } finally {
       setSaving(false);
     }
@@ -71,9 +71,9 @@ export default function CustomerDetail() {
     <div className="space-y-8">
       <section className="flex flex-col gap-4 rounded-2xl bg-white p-8 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Butiran pelanggan</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Donor details</p>
           <h1 className="mt-3 text-3xl font-semibold text-slate-950">{customer.full_name}</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Profil pelanggan, maklumat hubungan, dan sejarah pesanan dalam satu tempat.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Donor profile, contact information, and donation history in one place.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Link
@@ -81,7 +81,7 @@ export default function CustomerDetail() {
             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
           >
             <ArrowLeft className="h-4 w-4" />
-            Kembali ke papan pemuka
+            Back to dashboard
           </Link>
           <span className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold ${statusBadges[customer.status] || statusBadges.new}`}>
             <CheckCircle2 className="h-4 w-4" />
@@ -97,8 +97,8 @@ export default function CustomerDetail() {
               <User className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Profil</p>
-              <p className="mt-1 text-sm text-slate-500">Kemaskini butiran pelanggan, kempen dan sumber.</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Profile</p>
+              <p className="mt-1 text-sm text-slate-500">Update donor details, campaign and source.</p>
             </div>
           </div>
 
@@ -110,7 +110,7 @@ export default function CustomerDetail() {
 
           <div className="mt-6 space-y-5">
             <div>
-              <label className="block text-sm font-semibold text-slate-700">Nama penuh</label>
+              <label className="block text-sm font-semibold text-slate-700">Full name</label>
               <input
                 name="full_name"
                 value={profile.full_name}
@@ -120,7 +120,7 @@ export default function CustomerDetail() {
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-semibold text-slate-700">Telefon</label>
+                <label className="block text-sm font-semibold text-slate-700">Phone</label>
                 <div className="relative mt-2">
                   <Phone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
@@ -146,7 +146,7 @@ export default function CustomerDetail() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-700">Kempen</label>
+              <label className="block text-sm font-semibold text-slate-700">Campaign</label>
               <input
                 name="campaign"
                 value={profile.campaign}
@@ -155,7 +155,7 @@ export default function CustomerDetail() {
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-700">Sumber</label>
+              <label className="block text-sm font-semibold text-slate-700">Source</label>
               <select
                 name="source"
                 value={profile.source}
@@ -168,13 +168,13 @@ export default function CustomerDetail() {
                 <option value="instagram">Instagram</option>
                 <option value="tiktok">TikTok</option>
                 <option value="website">Website</option>
-                <option value="other">Lain-lain</option>
+                <option value="other">Other</option>
               </select>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 text-slate-500" />
-                <span>Disertai:</span>
+                <span>Joined:</span>
               </div>
               <p className="mt-2 font-semibold text-slate-900">{customer.created_at || 'Unknown'}</p>
             </div>
@@ -184,7 +184,7 @@ export default function CustomerDetail() {
               disabled={saving}
             >
               <RefreshCw className="h-4 w-4" />
-              {saving ? 'Menyimpan…' : 'Simpan profil'}
+              {saving ? 'Saving…' : 'Save profile'}
             </button>
           </div>
         </section>
@@ -224,24 +224,24 @@ export default function CustomerDetail() {
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Sejarah sumbangan</p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-950">Sumbangan terkini</h2>
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Donation history</p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-950">Recent donations</h2>
           </div>
-          <p className="text-sm text-slate-500">{orders.length} sumbangan</p>
+          <p className="text-sm text-slate-500">{orders.length} donations</p>
         </div>
 
         {orders.length === 0 ? (
-          <div className="mt-6 rounded-xl bg-slate-50 p-6 text-slate-600">Tiada sumbangan untuk dermawan ini.</div>
+          <div className="mt-6 rounded-xl bg-slate-50 p-6 text-slate-600">No donations found for this donor.</div>
         ) : (
           <div className="mt-6 overflow-x-auto overflow-hidden rounded-xl border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm text-slate-600">
               <thead className="bg-slate-50 text-slate-700">
                 <tr>
-                  <th className="px-4 py-4 font-semibold">Tarikh Sumbangan</th>
-                  <th className="px-4 py-4 font-semibold">Jumlah</th>
-                  <th className="px-4 py-4 font-semibold">Sumber</th>
-                  <th className="px-4 py-4 font-semibold">Kempen</th>
-                  <th className="px-4 py-4 font-semibold">Dicipta Pada</th>
+                  <th className="px-4 py-4 font-semibold">Donation Date</th>
+                  <th className="px-4 py-4 font-semibold">Amount</th>
+                  <th className="px-4 py-4 font-semibold">Source</th>
+                  <th className="px-4 py-4 font-semibold">Campaign</th>
+                  <th className="px-4 py-4 font-semibold">Created At</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">

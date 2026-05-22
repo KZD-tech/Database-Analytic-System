@@ -91,21 +91,21 @@ function App() {
                 className="flex items-center gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:bg-slate-800"
               >
                 <LayoutDashboard className="h-4 w-4 text-slate-300" />
-                Laman Utama
+                Home
               </Link>
               <Link
                 to="/"
                 className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
               >
                 <Users className="h-4 w-4 text-slate-300" />
-                Dermawan
+                Donors
               </Link>
               <Link
                 to="/staff"
                 className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
               >
                 <Database className="h-4 w-4 text-slate-300" />
-                Staf
+                Staff
               </Link>
               {isManagerOrAbove && (
                 <Link

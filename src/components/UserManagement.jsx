@@ -11,9 +11,9 @@ const roleBadge = {
 
 const roleLabel = {
   admin: 'Admin',
-  manager: 'Pengurus',
+  manager: 'Manager',
   editor: 'Editor',
-  viewer: 'Penonton'
+  viewer: 'Viewer'
 };
 
 const ROLES = ['admin', 'manager', 'editor', 'viewer'];
@@ -27,7 +27,7 @@ export default function UserManagement() {
   const [form, setForm] = useState(defaultForm);
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [editingRole, setEditingRole] = useState(null); // { id, role }
+  const [editingRole, setEditingRole] = useState(null);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -49,7 +49,7 @@ export default function UserManagement() {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     if (!form.email || !form.password || !form.full_name) {
-      setFormError('Sila isi semua medan yang diperlukan.');
+      setFormError('Please fill in all required fields.');
       return;
     }
     setSubmitting(true);
@@ -59,7 +59,7 @@ export default function UserManagement() {
       setShowForm(false);
       await loadUsers();
     } catch (err) {
-      const msg = err?.response?.data?.error || 'Gagal mencipta pengguna.';
+      const msg = err?.response?.data?.error || 'Failed to create user.';
       setFormError(msg);
     } finally {
       setSubmitting(false);
@@ -86,7 +86,7 @@ export default function UserManagement() {
   };
 
   const handleDeactivate = async (userId) => {
-    if (!window.confirm('Adakah anda pasti untuk nyahaktifkan pengguna ini?')) return;
+    if (!window.confirm('Are you sure you want to deactivate this user?')) return;
     try {
       await deleteUser(userId);
       await loadUsers();
@@ -100,10 +100,10 @@ export default function UserManagement() {
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Pentadbiran</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Pengurusan Pengguna</h2>
+            <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Administration</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">User Management</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Urus akaun pengguna, peranan dan akses sistem.
+              Manage user accounts, roles and system access.
             </p>
           </div>
           <button
@@ -112,7 +112,7 @@ export default function UserManagement() {
             className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
             <Plus className="h-4 w-4" />
-            Tambah pengguna
+            Add user
           </button>
         </div>
       </section>
@@ -120,7 +120,7 @@ export default function UserManagement() {
       {showForm && (
         <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-slate-950">Pengguna baharu</h3>
+            <h3 className="text-lg font-semibold text-slate-950">New user</h3>
             <button
               type="button"
               onClick={() => { setShowForm(false); setForm(defaultForm); setFormError(''); }}
@@ -131,7 +131,7 @@ export default function UserManagement() {
           </div>
           <form onSubmit={handleCreateUser} className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-semibold text-slate-700" htmlFor="user-full-name">Nama penuh</label>
+              <label className="block text-sm font-semibold text-slate-700" htmlFor="user-full-name">Full name</label>
               <input
                 id="user-full-name"
                 name="full_name"
@@ -140,11 +140,11 @@ export default function UserManagement() {
                 onChange={handleFormChange}
                 required
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
-                placeholder="Ahmad bin Ali"
+                placeholder="John Smith"
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-700" htmlFor="user-email">Emel</label>
+              <label className="block text-sm font-semibold text-slate-700" htmlFor="user-email">Email</label>
               <input
                 id="user-email"
                 name="email"
@@ -153,11 +153,11 @@ export default function UserManagement() {
                 onChange={handleFormChange}
                 required
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
-                placeholder="pengguna@ihsanku.local"
+                placeholder="user@ihsanku.local"
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-700" htmlFor="user-password">Kata laluan</label>
+              <label className="block text-sm font-semibold text-slate-700" htmlFor="user-password">Password</label>
               <input
                 id="user-password"
                 name="password"
@@ -166,11 +166,11 @@ export default function UserManagement() {
                 onChange={handleFormChange}
                 required
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
-                placeholder="Min. 8 aksara"
+                placeholder="Min. 8 characters"
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-700" htmlFor="user-role">Peranan</label>
+              <label className="block text-sm font-semibold text-slate-700" htmlFor="user-role">Role</label>
               <select
                 id="user-role"
                 name="role"
@@ -192,14 +192,14 @@ export default function UserManagement() {
                 onClick={() => { setShowForm(false); setForm(defaultForm); setFormError(''); }}
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Batal
+                Cancel
               </button>
               <button
                 type="submit"
                 disabled={submitting}
                 className="rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
               >
-                {submitting ? 'Menyimpan…' : 'Simpan pengguna'}
+                {submitting ? 'Saving…' : 'Save user'}
               </button>
             </div>
           </form>
@@ -211,21 +211,21 @@ export default function UserManagement() {
           <table className="min-w-full divide-y divide-slate-200 text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-slate-700">
               <tr>
-                <th className="px-4 py-4 font-semibold">Nama</th>
-                <th className="px-4 py-4 font-semibold">Emel</th>
-                <th className="px-4 py-4 font-semibold">Peranan</th>
+                <th className="px-4 py-4 font-semibold">Name</th>
+                <th className="px-4 py-4 font-semibold">Email</th>
+                <th className="px-4 py-4 font-semibold">Role</th>
                 <th className="px-4 py-4 font-semibold">Status</th>
-                <th className="px-4 py-4 font-semibold">Tindakan</th>
+                <th className="px-4 py-4 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="px-4 py-10 text-center text-slate-500">Memuatkan pengguna…</td>
+                  <td colSpan="5" className="px-4 py-10 text-center text-slate-500">Loading users…</td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-4 py-10 text-center text-slate-500">Tiada pengguna ditemui.</td>
+                  <td colSpan="5" className="px-4 py-10 text-center text-slate-500">No users found.</td>
                 </tr>
               ) : (
                 users.map((user) => (
@@ -271,7 +271,7 @@ export default function UserManagement() {
                           type="button"
                           onClick={() => setEditingRole({ id: user.id, role: user.role })}
                           className={`inline-flex cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition hover:opacity-80 ${roleBadge[user.role] || roleBadge.viewer}`}
-                          title="Klik untuk tukar peranan"
+                          title="Click to change role"
                         >
                           <Shield className="mr-1 h-3 w-3" />
                           {roleLabel[user.role] || user.role}
@@ -284,7 +284,7 @@ export default function UserManagement() {
                           user.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
                         }`}
                       >
-                        {user.active ? 'Aktif' : 'Tidak aktif'}
+                        {user.active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
                     <td className="px-4 py-4">
@@ -298,13 +298,13 @@ export default function UserManagement() {
                               : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                           }`}
                         >
-                          {user.active ? 'Nyahaktif' : 'Aktifkan'}
+                          {user.active ? 'Deactivate' : 'Activate'}
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDeactivate(user.id)}
                           className="rounded-full bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100"
-                          title="Nyahaktifkan pengguna"
+                          title="Deactivate user"
                         >
                           <UserX className="h-3.5 w-3.5" />
                         </button>

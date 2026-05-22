@@ -12,20 +12,20 @@ const statusBadges = {
 };
 
 const statusLabels = {
-  all: 'Semua',
-  new: 'Baru',
-  active: 'Aktif',
-  repeat: 'Ulangan',
-  dormant: 'Tidak aktif',
-  churn: 'Berhenti'
+  all: 'All',
+  new: 'New',
+  active: 'Active',
+  repeat: 'Repeat',
+  dormant: 'Dormant',
+  churn: 'Churned'
 };
 
 const statusDescriptions = {
-  new: 'Pelanggan baru adalah mereka yang membuat pembelian kali pertama.',
-  active: 'Pelanggan aktif membuat pembelian secara konsisten.',
-  repeat: 'Pelanggan ulangan membuat pesanan lebih daripada sekali.',
-  dormant: 'Pelanggan tidak aktif belum membuat pesanan baru dalam tempoh tertentu.',
-  churn: 'Pelanggan berhenti tidak lagi membuat pembelian selepas tempoh sebelumnya.'
+  new: 'New donors are those who made their first donation.',
+  active: 'Active donors donate consistently.',
+  repeat: 'Repeat donors have donated more than once.',
+  dormant: 'Dormant donors have not made a new donation within a certain period.',
+  churn: 'Churned donors have stopped donating after a previous period.'
 };
 
 const parseDate = (value) => {
@@ -170,8 +170,8 @@ export default function Dashboard({ summary, loading: appLoading }) {
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Dashboard</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Gambaran keseluruhan sumbangan NGO</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Lihat jumlah dermawan, jumlah sumbangan dan graf bulanan dalam satu tempat.</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">NGO Donation Overview</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">View total donors, donation amounts and monthly charts in one place.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -180,14 +180,14 @@ export default function Dashboard({ summary, loading: appLoading }) {
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
             >
               <Download className="h-4 w-4" />
-              Eksport CSV
+              Export CSV
             </button>
             <Link
               to="/order-input"
               className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
               <PlusCircle className="h-4 w-4" />
-              Tambah sumbangan
+              Add donation
             </Link>
           </div>
         </div>
@@ -195,10 +195,10 @@ export default function Dashboard({ summary, loading: appLoading }) {
 
       <div className="grid gap-4 xl:grid-cols-4">
         {[
-          { label: 'Jumlah dermawan', value: summary.total, icon: Users, accent: 'bg-slate-900 text-white' },
-          { label: 'Jumlah sumbangan', value: `RM ${(summary.total_collection || 0).toFixed(2)}`, icon: Zap, accent: 'bg-emerald-50 text-emerald-700' },
-          { label: 'Purata sumbangan', value: `RM ${(summary.avg_order_value || 0).toFixed(2)}`, icon: TrendingUp, accent: 'bg-sky-50 text-sky-700' },
-          { label: 'Transaksi sumbangan', value: summary.total_transactions || 0, icon: Activity, accent: 'bg-amber-50 text-amber-700' }
+          { label: 'Total donors', value: summary.total, icon: Users, accent: 'bg-slate-900 text-white' },
+          { label: 'Total donations', value: `RM ${(summary.total_collection || 0).toFixed(2)}`, icon: Zap, accent: 'bg-emerald-50 text-emerald-700' },
+          { label: 'Average donation', value: `RM ${(summary.avg_order_value || 0).toFixed(2)}`, icon: TrendingUp, accent: 'bg-sky-50 text-sky-700' },
+          { label: 'Donation transactions', value: summary.total_transactions || 0, icon: Activity, accent: 'bg-amber-50 text-amber-700' }
         ].map((card) => (
           <div key={card.label} className="rounded-2xl bg-white p-5 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
             <div className="flex items-center justify-between gap-4">
@@ -217,9 +217,9 @@ export default function Dashboard({ summary, loading: appLoading }) {
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Graf sumbangan</p>
-            <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Jumlah sumbangan bulanan</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Graf ini menunjukkan jumlah sumbangan mengikut bulan untuk tempoh enam bulan terakhir.</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Donation chart</p>
+            <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Monthly donation totals</h3>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">This chart shows donation totals by month.</p>
           </div>
           <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">Jumlah sumbangan: RM {(summary.total_collection || 0).toFixed(2)}</div>
         </div>
@@ -227,7 +227,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
         <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-5">
           <div className="relative overflow-hidden rounded-xl bg-white p-4 shadow-sm">
             {chartLoading ? (
-              <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">Memuatkan graf…</div>
+              <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">Loading chart…</div>
             ) : (
               <svg viewBox={`0 0 ${barData.width} ${barData.height}`} className="w-full h-[280px]">
                 <defs>
@@ -300,7 +300,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0 space-y-4">
-            <label className="sr-only" htmlFor="dashboard-search">Cari dermawan</label>
+            <label className="sr-only" htmlFor="dashboard-search">Search donors</label>
             <div className="relative">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -309,12 +309,12 @@ export default function Dashboard({ summary, loading: appLoading }) {
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-12 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
-                placeholder="Cari dermawan..."
+                placeholder="Search donor..."
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-semibold text-slate-700" htmlFor="start-date">Dari tarikh</label>
+                <label className="block text-sm font-semibold text-slate-700" htmlFor="start-date">From date</label>
                 <input
                   id="start-date"
                   type="date"
@@ -324,7 +324,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-slate-700" htmlFor="end-date">Hingga tarikh</label>
+                <label className="block text-sm font-semibold text-slate-700" htmlFor="end-date">To date</label>
                 <input
                   id="end-date"
                   type="date"
@@ -361,15 +361,15 @@ export default function Dashboard({ summary, loading: appLoading }) {
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-xl font-semibold text-slate-950">Senarai dermawan</h3>
-            <p className="mt-1 text-sm text-slate-500">Semak taburan sumbangan, nilai transaksi dan dermawan terkini.</p>
+            <h3 className="text-xl font-semibold text-slate-950">Donor list</h3>
+            <p className="mt-1 text-sm text-slate-500">View donation distribution, transaction values and recent donors.</p>
           </div>
           {total > 0 ? (
             <p className="text-sm text-slate-500">
-              Memaparkan {startIdx}–{endIdx} daripada {total} dermawan
+              Showing {startIdx}–{endIdx} of {total} donors
             </p>
           ) : (
-            <p className="text-sm text-slate-500">0 dermawan</p>
+            <p className="text-sm text-slate-500">0 donors</p>
           )}
         </div>
 
@@ -377,13 +377,13 @@ export default function Dashboard({ summary, loading: appLoading }) {
           <table className="min-w-full divide-y divide-slate-200 text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-slate-700">
               <tr>
-                <th className="px-4 py-4 font-semibold">Dermawan</th>
-                <th className="px-4 py-4 font-semibold">Telefon</th>
-                <th className="px-4 py-4 font-semibold">Transaksi</th>
-                <th className="px-4 py-4 font-semibold">Jumlah</th>
-                <th className="px-4 py-4 font-semibold">Sumbangan pertama</th>
-                <th className="px-4 py-4 font-semibold">Sumbangan terkini</th>
-                <th className="px-4 py-4 font-semibold">Purata</th>
+                <th className="px-4 py-4 font-semibold">Donor</th>
+                <th className="px-4 py-4 font-semibold">Phone</th>
+                <th className="px-4 py-4 font-semibold">Transactions</th>
+                <th className="px-4 py-4 font-semibold">Total</th>
+                <th className="px-4 py-4 font-semibold">First donation</th>
+                <th className="px-4 py-4 font-semibold">Latest donation</th>
+                <th className="px-4 py-4 font-semibold">Average</th>
                 <th className="px-4 py-4 font-semibold">High Value</th>
                 <th className="px-4 py-4 font-semibold">Status</th>
               </tr>
@@ -391,11 +391,11 @@ export default function Dashboard({ summary, loading: appLoading }) {
             <tbody className="divide-y divide-slate-200 bg-white">
               {appLoading || tableLoading ? (
                 <tr>
-                  <td colSpan="9" className="px-4 py-10 text-center text-slate-500">Memuatkan data dermawan…</td>
+                  <td colSpan="9" className="px-4 py-10 text-center text-slate-500">Loading donor data…</td>
                 </tr>
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="px-4 py-10 text-center text-slate-500">Tiada pelanggan sepadan. Tukar penapis atau tambah pesanan baru.</td>
+                  <td colSpan="9" className="px-4 py-10 text-center text-slate-500">No donors found. Adjust filters or add a new donation.</td>
                 </tr>
               ) : (
                 customers.map((customer) => (
@@ -411,7 +411,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
                         </span>
                         <div>
                           <p className="font-semibold">{customer.full_name}</p>
-                          <p className="text-xs text-slate-500">{customer.email || 'Tiada emel'}</p>
+                          <p className="text-xs text-slate-500">{customer.email || 'No email'}</p>
                         </div>
                       </Link>
                     </td>
@@ -450,10 +450,10 @@ export default function Dashboard({ summary, loading: appLoading }) {
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ChevronLeft className="h-4 w-4" />
-              Sebelum
+              Previous
             </button>
             <span className="text-sm text-slate-500">
-              Halaman {currentPage} daripada {total_pages}
+              Page {currentPage} of {total_pages}
             </span>
             <button
               type="button"
@@ -461,7 +461,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
               disabled={currentPage >= total_pages}
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Seterusnya
+              Next
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
