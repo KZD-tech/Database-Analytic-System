@@ -5,3 +5,4 @@ db/crm.sqlite
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+scripts/donors-transformed.csv
