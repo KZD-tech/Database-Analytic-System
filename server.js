@@ -1048,7 +1048,7 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
 
 // ─── Chart: Donor Growth (new donors per month + cumulative) ─────────────────
 
-app.get('/api/charts/donor-growth', requireRole('viewer'), async (req, res) => {
+app.get('/api/charts/donor-growth', async (req, res) => {
   const months = parseInt(req.query.months || '12', 10);
   const rows = [];
   const now = new Date();
@@ -1080,7 +1080,7 @@ app.get('/api/charts/donor-growth', requireRole('viewer'), async (req, res) => {
 
 // ─── Chart: New vs Returning Donors per month ─────────────────────────────────
 
-app.get('/api/charts/new-vs-returning', requireRole('viewer'), async (req, res) => {
+app.get('/api/charts/new-vs-returning', async (req, res) => {
   const months = parseInt(req.query.months || '12', 10);
   const rows = [];
   const now = new Date();
@@ -1114,7 +1114,7 @@ app.get('/api/charts/new-vs-returning', requireRole('viewer'), async (req, res) 
 
 // ─── Chart: Source Breakdown Donut ────────────────────────────────────────────
 
-app.get('/api/charts/source-breakdown', requireRole('viewer'), async (req, res) => {
+app.get('/api/charts/source-breakdown', async (req, res) => {
   const { data, error } = await supabase
     .from('donations').select('source, amount').limit(50000);
   if (error) return res.status(500).json({ error: error.message });
@@ -1136,7 +1136,7 @@ app.get('/api/charts/source-breakdown', requireRole('viewer'), async (req, res) 
 
 // ─── Chart: Year-over-Year Comparison ─────────────────────────────────────────
 
-app.get('/api/charts/yoy-comparison', requireRole('viewer'), async (req, res) => {
+app.get('/api/charts/yoy-comparison', async (req, res) => {
   const now = new Date();
   const curYear = now.getFullYear();
   const prevYear = curYear - 1;
