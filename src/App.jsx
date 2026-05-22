@@ -80,67 +80,72 @@ function App() {
     <div className="app-shell min-h-screen bg-slate-50 text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col gap-6 px-4 py-6 lg:flex-row lg:px-8">
           {!isLoginRoute && (
-          <aside className="hidden w-full shrink-0 rounded-2xl border border-slate-800/50 bg-slate-950/95 p-6 text-slate-200 shadow-xl shadow-slate-950/10 lg:block lg:w-72">
-            <Link to="/" className="flex items-center justify-center rounded-2xl bg-slate-900/80 p-3 shadow-sm ring-1 ring-slate-700 transition hover:bg-slate-800">
+          <aside
+            className="hidden w-full shrink-0 rounded-2xl p-6 text-white shadow-xl lg:block lg:w-72"
+            style={{ background: 'linear-gradient(to bottom, #2563eb, #0284c7)' }}
+          >
+            <Link to="/" className="flex items-center justify-center rounded-2xl p-3 shadow-sm ring-1 ring-white/20 transition hover:bg-white/10" style={{ background: 'rgba(255,255,255,0.12)' }}>
               <img src="/Logo-IhsanKu-02.png" alt="IhsanKu logo" className="h-14 w-auto max-w-full" />
             </Link>
 
-            <nav className="mt-10 space-y-2">
+            <nav className="mt-10 space-y-1">
               <Link
                 to="/"
-                className="flex items-center gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:bg-slate-800"
+                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                style={{ background: 'rgba(255,255,255,0.15)' }}
               >
-                <LayoutDashboard className="h-4 w-4 text-slate-300" />
+                <LayoutDashboard className="h-4 w-4 text-white/80" />
                 Home
               </Link>
               <Link
                 to="/"
-                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-white/85 transition hover:bg-white/10"
               >
-                <Users className="h-4 w-4 text-slate-300" />
+                <Users className="h-4 w-4 text-white/70" />
                 Donors
               </Link>
               <Link
                 to="/staff"
-                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-white/85 transition hover:bg-white/10"
               >
-                <Database className="h-4 w-4 text-slate-300" />
+                <Database className="h-4 w-4 text-white/70" />
                 Staff
               </Link>
               {isManagerOrAbove && (
                 <Link
                   to="/webhooks"
-                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-white/85 transition hover:bg-white/10"
                 >
-                  <Webhook className="h-4 w-4 text-slate-300" />
+                  <Webhook className="h-4 w-4 text-white/70" />
                   Webhooks
                 </Link>
               )}
               {isAdmin && (
                 <Link
                   to="/users"
-                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+                  className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-white/85 transition hover:bg-white/10"
                 >
-                  <Shield className="h-4 w-4 text-slate-300" />
-                  Pengguna
+                  <Shield className="h-4 w-4 text-white/70" />
+                  Users
                 </Link>
               )}
             </nav>
 
             {adminToken && (
-              <div className="mt-8 border-t border-slate-700 pt-4">
+              <div className="mt-8 border-t border-white/20 pt-4">
                 {currentUser && (
                   <div className="mb-3 px-2">
-                    <p className="text-xs text-slate-400 truncate">{currentUser.full_name || currentUser.email}</p>
-                    <p className="text-xs text-slate-500 capitalize">{currentUser.role || 'admin'}</p>
+                    <p className="text-xs text-white/80 truncate">{currentUser.full_name || currentUser.email}</p>
+                    <p className="text-xs text-white/60 capitalize">{currentUser.role || 'admin'}</p>
                   </div>
                 )}
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  className="w-full rounded-2xl px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                  style={{ background: 'rgba(255,255,255,0.12)' }}
                 >
-                  Log keluar
+                  Log out
                 </button>
               </div>
             )}
