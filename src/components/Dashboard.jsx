@@ -113,7 +113,7 @@ const donationChartData = (series) => {
 
 const PER_PAGE = 50;
 
-export default function Dashboard({ summary, orders, loading: appLoading }) {
+export default function Dashboard({ summary, orders = [], loading: appLoading }) {
   const navigate = useNavigate();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
