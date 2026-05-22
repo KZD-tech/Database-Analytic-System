@@ -11,7 +11,7 @@ import UserManagement from './components/UserManagement';
 import WebhooksPanel from './components/WebhooksPanel';
 
 function App() {
-  const [summary, setSummary] = useState({ total: 0, active: 0, repeat: 0, dormant: 0, churn: 0, total_collection: 0, total_transactions: 0, avg_order_value: 0 });
+  const [summary, setSummary] = useState({ total: 0, new: 0, active: 0, repeat: 0, dormant: 0, churn: 0, total_collection: 0, total_transactions: 0, avg_order_value: 0 });
   const [loading, setLoading] = useState(false);
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem('admin_token'));
   const [currentUser, setCurrentUser] = useState(() => {

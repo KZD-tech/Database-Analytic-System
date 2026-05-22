@@ -60,6 +60,39 @@ const barChartData = (series) => {
   return { width, height, paddingLeft, paddingTop, paddingBottom, plotWidth, plotHeight, bars, maxValue };
 };
 
+const pieChartData = (summary) => {
+  const slices = [
+    { key: 'new',     label: 'New',     value: summary.new || 0,     color: '#64748b' },
+    { key: 'active',  label: 'Active',  value: summary.active || 0,  color: '#10b981' },
+    { key: 'repeat',  label: 'Repeat',  value: summary.repeat || 0,  color: '#0ea5e9' },
+    { key: 'dormant', label: 'Dormant', value: summary.dormant || 0, color: '#f59e0b' },
+    { key: 'churn',   label: 'Churned', value: summary.churn || 0,   color: '#f43f5e' },
+  ];
+  const total = slices.reduce((sum, s) => sum + s.value, 0);
+  if (total === 0) return { slices, paths: [], total: 0 };
+
+  const cx = 110; const cy = 110; const r = 88; const innerR = 44;
+  let currentAngle = -Math.PI / 2;
+
+  const paths = slices
+    .filter((s) => s.value > 0)
+    .map((s) => {
+      const angle = (s.value / total) * 2 * Math.PI;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + angle;
+      currentAngle = endAngle;
+      const x1o = cx + r * Math.cos(startAngle); const y1o = cy + r * Math.sin(startAngle);
+      const x2o = cx + r * Math.cos(endAngle);   const y2o = cy + r * Math.sin(endAngle);
+      const x1i = cx + innerR * Math.cos(endAngle);   const y1i = cy + innerR * Math.sin(endAngle);
+      const x2i = cx + innerR * Math.cos(startAngle); const y2i = cy + innerR * Math.sin(startAngle);
+      const largeArc = angle > Math.PI ? 1 : 0;
+      const d = `M ${x1o} ${y1o} A ${r} ${r} 0 ${largeArc} 1 ${x2o} ${y2o} L ${x1i} ${y1i} A ${innerR} ${innerR} 0 ${largeArc} 0 ${x2i} ${y2i} Z`;
+      return { ...s, d, percent: ((s.value / total) * 100).toFixed(1) };
+    });
+
+  return { slices, paths, total };
+};
+
 const PER_PAGE = 50;
 
 export default function Dashboard({ summary, loading: appLoading }) {
@@ -215,84 +248,98 @@ export default function Dashboard({ summary, loading: appLoading }) {
       </div>
 
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid gap-8 xl:grid-cols-[1fr_auto]">
+          {/* Bar chart */}
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Donation chart</p>
-            <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Monthly donation totals</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">This chart shows donation totals by month.</p>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Donation chart</p>
+                <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Monthly donation totals</h3>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">This chart shows donation totals by month.</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">Total donations: RM {(summary.total_collection || 0).toFixed(2)}</div>
+            </div>
+
+            <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-5">
+              <div className="relative overflow-hidden rounded-xl bg-white p-4 shadow-sm">
+                {chartLoading ? (
+                  <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">Loading chart…</div>
+                ) : (
+                  <svg viewBox={`0 0 ${barData.width} ${barData.height}`} className="w-full h-[280px]">
+                    <defs>
+                      <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#2563eb" />
+                        <stop offset="100%" stopColor="#0284c7" />
+                      </linearGradient>
+                    </defs>
+                    {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
+                      const y = barData.paddingTop + (1 - tick) * barData.plotHeight;
+                      const val = tick * barData.maxValue;
+                      const lbl = val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}K` : val.toFixed(0);
+                      return (
+                        <g key={tick}>
+                          <line x1={barData.paddingLeft} y1={y} x2={barData.paddingLeft + barData.plotWidth} y2={y} stroke="#e2e8f0" strokeWidth="1" />
+                          <text x={barData.paddingLeft - 6} y={y + 4} fill="#94a3b8" fontSize="9" textAnchor="end">{lbl}</text>
+                        </g>
+                      );
+                    })}
+                    {barData.bars.map((bar) => (
+                      <g key={bar.label}>
+                        <title>RM {Number(bar.value).toFixed(2)}</title>
+                        <rect x={bar.barX} y={bar.barY} width={bar.barWidth} height={bar.barHeight} fill="url(#barGradient)" rx="3" ry="3" />
+                        <text x={bar.barX + bar.barWidth / 2} y={barData.height - barData.paddingBottom + 16} fill="#64748b" fontSize="10" textAnchor="middle">{bar.label}</text>
+                      </g>
+                    ))}
+                  </svg>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">Jumlah sumbangan: RM {(summary.total_collection || 0).toFixed(2)}</div>
-        </div>
 
-        <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-5">
-          <div className="relative overflow-hidden rounded-xl bg-white p-4 shadow-sm">
-            {chartLoading ? (
-              <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">Loading chart…</div>
-            ) : (
-              <svg viewBox={`0 0 ${barData.width} ${barData.height}`} className="w-full h-[280px]">
-                <defs>
-                  <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#2563eb" />
-                    <stop offset="100%" stopColor="#0284c7" />
-                  </linearGradient>
-                  <linearGradient id="barGradientHover" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#1d4ed8" />
-                    <stop offset="100%" stopColor="#0369a1" />
-                  </linearGradient>
-                </defs>
-
-                {/* Horizontal grid lines + Y-axis labels */}
-                {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
-                  const y = barData.paddingTop + (1 - tick) * barData.plotHeight;
-                  const val = tick * barData.maxValue;
-                  const label = val >= 1000000
-                    ? `${(val / 1000000).toFixed(1)}M`
-                    : val >= 1000
-                    ? `${(val / 1000).toFixed(0)}K`
-                    : val.toFixed(0);
-                  return (
-                    <g key={tick}>
-                      <line
-                        x1={barData.paddingLeft}
-                        y1={y}
-                        x2={barData.paddingLeft + barData.plotWidth}
-                        y2={y}
-                        stroke="#e2e8f0"
-                        strokeWidth="1"
-                      />
-                      <text x={barData.paddingLeft - 6} y={y + 4} fill="#94a3b8" fontSize="9" textAnchor="end">
-                        {label}
-                      </text>
-                    </g>
-                  );
-                })}
-
-                {/* Bars */}
-                {barData.bars.map((bar) => (
-                  <g key={bar.label} className="group">
-                    <title>RM {Number(bar.value).toFixed(2)}</title>
-                    <rect
-                      x={bar.barX}
-                      y={bar.barY}
-                      width={bar.barWidth}
-                      height={bar.barHeight}
-                      fill="url(#barGradient)"
-                      rx="3"
-                      ry="3"
-                    />
-                    <text
-                      x={bar.barX + bar.barWidth / 2}
-                      y={barData.height - barData.paddingBottom + 16}
-                      fill="#64748b"
-                      fontSize="10"
-                      textAnchor="middle"
-                    >
-                      {bar.label}
-                    </text>
-                  </g>
-                ))}
-              </svg>
-            )}
+          {/* Pie chart */}
+          <div className="flex flex-col xl:w-64">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Donor status</p>
+              <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Status breakdown</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Distribution of donors by current status.</p>
+            </div>
+            <div className="mt-6 flex flex-col items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
+              {(() => {
+                const pie = pieChartData(summary);
+                return (
+                  <>
+                    <svg viewBox="0 0 220 220" className="w-full max-w-[200px]">
+                      {pie.total === 0 ? (
+                        <circle cx="110" cy="110" r="88" fill="#f1f5f9" />
+                      ) : (
+                        pie.paths.map((seg) => (
+                          <path key={seg.key} d={seg.d} fill={seg.color}>
+                            <title>{seg.label}: {seg.value} ({seg.percent}%)</title>
+                          </path>
+                        ))
+                      )}
+                      <circle cx="110" cy="110" r="44" fill="white" />
+                      <text x="110" y="106" textAnchor="middle" fill="#0f172a" fontSize="18" fontWeight="600">{pie.total}</text>
+                      <text x="110" y="122" textAnchor="middle" fill="#94a3b8" fontSize="9">donors</text>
+                    </svg>
+                    <div className="w-full space-y-2">
+                      {pie.paths.map((seg) => (
+                        <div key={seg.key} className="flex items-center justify-between gap-2 text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: seg.color }} />
+                            <span className="text-slate-700 font-medium">{seg.label}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-right">
+                            <span className="font-semibold text-slate-900">{seg.value.toLocaleString()}</span>
+                            <span className="text-slate-400 text-xs w-10">{seg.percent}%</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
           </div>
         </div>
       </section>
@@ -429,7 +476,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
                     <td className="px-4 py-4">
                       <span
                         className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusBadges[customer.status] || statusBadges.new}`}
-                        title={statusDescriptions[customer.status] || 'Status pelanggan tidak diketahui.'}
+                        title={statusDescriptions[customer.status] || 'Unknown donor status.'}
                       >
                         {statusLabels[customer.status] || customer.status}
                       </span>
