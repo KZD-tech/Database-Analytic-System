@@ -1254,7 +1254,7 @@ app.get('/api/top-donors', async (req, res) => {
 // ─── Campaign list ────────────────────────────────────────────────────────────
 
 app.get('/api/campaigns', async (req, res) => {
-  const batchSize = 10000;
+  const batchSize = 1000;
   let from = 0;
   const allNames = new Set();
   while (true) {
@@ -1274,7 +1274,7 @@ app.get('/api/campaigns', async (req, res) => {
 
 app.get('/api/donations/campaign-chart', async (req, res) => {
   const { from_date, to_date } = req.query;
-  const batchSize = 10000;
+  const batchSize = 1000;
   let offset = 0;
   const totals = {};
   const counts = {};
@@ -1316,7 +1316,7 @@ app.get('/api/reports/monthly', async (req, res) => {
   const lastDay = new Date(year, mon, 0).getDate();
   const toDate = `${year}-${String(mon).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-  const batchSize = 10000;
+  const batchSize = 1000;
   let offset = 0;
   let allDonations = [];
   while (true) {
@@ -1420,7 +1420,7 @@ app.get('/api/charts/new-vs-returning', async (req, res) => {
     const to = `${year}-${mon}-${String(lastDay).padStart(2, '0')}`;
 
     // Paginate donations for this month to get all donor_ids
-    const batchSize = 10000;
+    const batchSize = 1000;
     let offset = 0;
     const donorIdSet = new Set();
     while (true) {
@@ -1455,7 +1455,7 @@ app.get('/api/charts/new-vs-returning', async (req, res) => {
 });
 
 app.get('/api/charts/source-breakdown', async (req, res) => {
-  const batchSize = 10000;
+  const batchSize = 1000;
   let offset = 0;
   const map = {};
 
@@ -1484,7 +1484,7 @@ app.get('/api/charts/source-breakdown', async (req, res) => {
 
 app.get('/api/charts/yoy-comparison', async (req, res) => {
   const yearMonthTotals = {};
-  const batchSize = 10000;
+  const batchSize = 1000;
   let from = 0;
 
   while (true) {
