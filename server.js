@@ -941,7 +941,7 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 
-  // Validate all rows first before touching the database
+  // Validate all rows first
   for (let i = 0; i < records.length; i++) {
     const row = records[i];
     const lineNumber = i + 2;
@@ -954,80 +954,82 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
   }
 
   const now = new Date().toISOString();
-
-  // Step 1: Load all existing donors into memory (phone + email maps)
-  const { data: existingDonors } = await supabase.from('donors').select('id, phone, email');
-  const phoneMap = {};
-  const emailMap = {};
-  (existingDonors || []).forEach((d) => {
-    if (d.phone) phoneMap[d.phone.trim()] = d.id;
-    if (d.email) emailMap[d.email.trim().toLowerCase()] = d.id;
-  });
-
-  // Step 2: Resolve donor IDs, collect new donors to insert
-  const newDonors = [];
-  const rowDonorKeys = [];
-
-  const resolveMapVal = (val) => {
-    if (!val) return null;
-    if (typeof val === 'number') return { type: 'new', idx: val };
-    return { type: 'existing', id: val };
-  };
-
-  for (const row of records) {
-    const phone = (row.phone || '').trim();
-    const email = (row.email || '').trim().toLowerCase();
-    const phoneKey = phone || null;
-    const emailKey = email || null;
-
-    const fromPhone = phoneKey ? phoneMap[phoneKey] : undefined;
-    const fromEmail = emailKey ? emailMap[emailKey] : undefined;
-    const match = fromPhone !== undefined ? fromPhone : fromEmail;
-
-    if (match !== undefined) {
-      rowDonorKeys.push(resolveMapVal(match));
-    } else {
-      const idx = newDonors.length;
-      newDonors.push({ name: row.name || 'Unknown', phone: phoneKey || null, email: emailKey || null, created_at: now });
-      rowDonorKeys.push({ type: 'new', idx });
-      // Store idx (number) so resolveMapVal knows it's a pending new donor
-      if (phoneKey) phoneMap[phoneKey] = idx;
-      if (emailKey) emailMap[emailKey] = idx;
-    }
-  }
-
-  // Step 3: Batch insert new donors in chunks of 500
-  const insertedDonors = [];
-  const CHUNK = 500;
-  for (let i = 0; i < newDonors.length; i += CHUNK) {
-    const chunk = newDonors.slice(i, i + CHUNK);
-    const { data, error } = await supabase.from('donors').insert(chunk).select('id');
-    if (error) return res.status(500).json({ error: `Insert donors: ${error.message}` });
-    insertedDonors.push(...(data || []));
-  }
-
-  // Step 4: Build final donor ID list per row
-  const donorIds = rowDonorKeys.map((k) => {
-    if (k.type === 'existing') return k.id;
-    return insertedDonors[k.idx]?.id ?? null;
-  });
-
-  // Step 5: Build donations array and batch insert in chunks of 500
-  const donationRows = records.map((row, i) => ({
-    donor_id: donorIds[i],
-    donation_date: row.donation_date,
-    amount: Number(row.amount),
-    source: row.source || null,
-    campaign_name: row.campaign || null,
-    created_at: now
-  }));
-
+  const CHUNK = 300;
   let imported = 0;
-  for (let i = 0; i < donationRows.length; i += CHUNK) {
-    const chunk = donationRows.slice(i, i + CHUNK);
-    const { error } = await supabase.from('donations').insert(chunk);
-    if (error) return res.status(500).json({ error: `Insert donations: ${error.message}` });
-    imported += chunk.length;
+
+  for (let i = 0; i < records.length; i += CHUNK) {
+    const chunk = records.slice(i, i + CHUNK);
+
+    // Collect unique phones and emails in this chunk
+    const phones = [...new Set(chunk.map((r) => (r.phone || '').trim()).filter(Boolean))];
+    const emails = [...new Set(chunk.map((r) => (r.email || '').trim().toLowerCase()).filter(Boolean))];
+
+    // Lookup only matching donors for this chunk (no full table scan)
+    const phoneMap = {};
+    const emailMap = {};
+    if (phones.length) {
+      const { data } = await supabase.from('donors').select('id, phone').in('phone', phones);
+      (data || []).forEach((d) => { if (d.phone) phoneMap[d.phone.trim()] = d.id; });
+    }
+    if (emails.length) {
+      const { data } = await supabase.from('donors').select('id, email').in('email', emails);
+      (data || []).forEach((d) => { if (d.email) emailMap[d.email.trim().toLowerCase()] = d.id; });
+    }
+
+    // Resolve donor IDs, collect new donors for this chunk
+    const newDonors = [];
+    const chunkDonorKeys = [];
+
+    for (const row of chunk) {
+      const phone = (row.phone || '').trim();
+      const email = (row.email || '').trim().toLowerCase();
+      const existingId = (phone && phoneMap[phone]) || (email && emailMap[email]);
+
+      if (existingId && typeof existingId !== 'number') {
+        chunkDonorKeys.push({ type: 'existing', id: existingId });
+      } else {
+        const pendingIdx = (phone && typeof phoneMap[phone] === 'number' ? phoneMap[phone] : null)
+          ?? (email && typeof emailMap[email] === 'number' ? emailMap[email] : null);
+        if (pendingIdx !== null) {
+          chunkDonorKeys.push({ type: 'new', idx: pendingIdx });
+        } else {
+          const idx = newDonors.length;
+          newDonors.push({ name: row.name || 'Unknown', phone: phone || null, email: email || null, created_at: now });
+          chunkDonorKeys.push({ type: 'new', idx });
+          if (phone) phoneMap[phone] = idx;
+          if (email) emailMap[email] = idx;
+        }
+      }
+    }
+
+    // Insert new donors for this chunk
+    let insertedDonors = [];
+    if (newDonors.length > 0) {
+      const { data, error } = await supabase.from('donors').insert(newDonors).select('id');
+      if (error) return res.status(500).json({ error: `Insert donors: ${error.message}` });
+      insertedDonors = data || [];
+    }
+
+    // Build donor IDs and insert donations
+    const donationRows = chunk.map((row, j) => {
+      const key = chunkDonorKeys[j];
+      const donorId = key.type === 'existing' ? key.id : (insertedDonors[key.idx]?.id ?? null);
+      return {
+        donor_id: donorId,
+        donation_date: row.donation_date,
+        amount: Number(row.amount),
+        source: row.source || null,
+        campaign_name: row.campaign || null,
+        created_at: now
+      };
+    }).filter((r) => r.donor_id);
+
+    if (donationRows.length > 0) {
+      const { error } = await supabase.from('donations').insert(donationRows);
+      if (error) return res.status(500).json({ error: `Insert donations: ${error.message}` });
+    }
+
+    imported += donationRows.length;
   }
 
   res.json({ success: true, imported });
