@@ -1415,21 +1415,32 @@ app.get('/api/charts/source-breakdown', async (req, res) => {
 });
 
 app.get('/api/charts/yoy-comparison', async (req, res) => {
-  const { data: donations, error } = await supabase
-    .from('donations')
-    .select('donation_date, amount')
-    .not('donation_date', 'is', null)
-    .limit(200000);
-
-  if (error) return res.status(500).json({ error: error.message });
-
   const yearMonthTotals = {};
-  for (const d of (donations || [])) {
-    const date = new Date(d.donation_date);
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    if (!yearMonthTotals[year]) yearMonthTotals[year] = new Array(12).fill(0);
-    yearMonthTotals[year][month] += Number(d.amount || 0);
+  const batchSize = 10000;
+  let from = 0;
+
+  while (true) {
+    const { data: batch, error } = await supabase
+      .from('donations')
+      .select('donation_date, amount')
+      .not('donation_date', 'is', null)
+      .order('donation_date', { ascending: true })
+      .range(from, from + batchSize - 1);
+
+    if (error) return res.status(500).json({ error: error.message });
+    if (!batch || batch.length === 0) break;
+
+    for (const d of batch) {
+      if (!d.donation_date) continue;
+      const year = parseInt(d.donation_date.slice(0, 4), 10);
+      const month = parseInt(d.donation_date.slice(5, 7), 10) - 1;
+      if (isNaN(year) || isNaN(month) || month < 0 || month > 11) continue;
+      if (!yearMonthTotals[year]) yearMonthTotals[year] = new Array(12).fill(0);
+      yearMonthTotals[year][month] += Number(d.amount || 0);
+    }
+
+    if (batch.length < batchSize) break;
+    from += batchSize;
   }
 
   const years = Object.keys(yearMonthTotals).map(Number).sort();
