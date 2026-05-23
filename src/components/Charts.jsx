@@ -254,21 +254,23 @@ export function YoyChart() {
     return next;
   });
 
-  const W = 560, H = 240, PL = 64, PR = 16, PT = 20, PB = 36;
+  const W = 620, H = 240, PL = 64, PR = 16, PT = 16, PB = 36;
   const chartW = W - PL - PR;
   const chartH = H - PT - PB;
+  const fmtK = (v) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v));
 
   const maxVal = data.length && visibleYears.length
     ? Math.max(...data.map(d => Math.max(...visibleYears.map(y => d[y] || 0))), 1)
     : 1;
 
-  const xPos = (i) => PL + (i / 11) * chartW;
-  const yScale = (v) => PT + chartH - (v / maxVal) * chartH;
-  const fmtK = (v) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v));
-
-  const linePath = (year) => data
-    .map((d, i) => `${i === 0 ? 'M' : 'L'}${xPos(i)},${yScale(d[year] || 0)}`)
-    .join(' ');
+  const groupW = chartW / 12;
+  const gap = 2;
+  const barW = visibleYears.length > 0 ? Math.max(4, (groupW - gap * (visibleYears.length + 1)) / visibleYears.length) : groupW * 0.6;
+  const totalBarBlock = visibleYears.length * barW + (visibleYears.length - 1) * gap;
+  const groupX = (i) => PL + i * groupW + groupW / 2 - totalBarBlock / 2;
+  const barX = (monthIdx, yearIdx) => groupX(monthIdx) + yearIdx * (barW + gap);
+  const barH = (v) => Math.max(0, (v / maxVal) * chartH);
+  const barY = (v) => PT + chartH - barH(v);
 
   return (
     <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 xl:col-span-2">
@@ -282,21 +284,16 @@ export function YoyChart() {
             <p className="text-xs text-slate-400">Monthly donation totals — all years in data</p>
           </div>
         </div>
-        {/* Year toggles */}
         {years.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {years.map((y, i) => {
               const color = YEAR_COLORS[i % YEAR_COLORS.length];
               const isHidden = hidden.has(y);
               return (
-                <button
-                  key={y}
-                  type="button"
-                  onClick={() => toggleYear(y)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${isHidden ? 'border-slate-200 bg-slate-50 text-slate-400' : 'border-transparent text-white'}`}
-                  style={isHidden ? {} : { backgroundColor: color }}
-                >
-                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: isHidden ? '#cbd5e1' : '#fff' }} />
+                <button key={y} type="button" onClick={() => toggleYear(y)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold border transition ${isHidden ? 'border-slate-200 bg-white text-slate-400' : 'border-transparent text-white'}`}
+                  style={isHidden ? {} : { backgroundColor: color }}>
+                  <span className="inline-block h-2 w-2 rounded-sm" style={{ background: isHidden ? '#cbd5e1' : '#fff' }} />
                   {y}
                 </button>
               );
@@ -307,11 +304,11 @@ export function YoyChart() {
 
       {loading ? (
         <div className="flex items-center justify-center h-56 text-slate-400 text-sm">Loading…</div>
-      ) : data.length === 0 ? (
+      ) : data.length === 0 || years.length === 0 ? (
         <div className="flex items-center justify-center h-56 text-slate-400 text-sm">No data available</div>
       ) : (
         <div className="overflow-x-auto">
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 360 }}>
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 420 }}>
             {/* Grid lines */}
             {[0, 0.25, 0.5, 0.75, 1].map(t => (
               <g key={t}>
@@ -319,29 +316,25 @@ export function YoyChart() {
                 <text x={PL - 6} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9" fill="#94a3b8">{fmtK(maxVal * t)}</text>
               </g>
             ))}
+            {/* Bars */}
+            {data.map((d, mi) =>
+              visibleYears.map((year, yi) => {
+                const color = YEAR_COLORS[years.indexOf(year) % YEAR_COLORS.length];
+                const v = d[year] || 0;
+                const h = barH(v);
+                return h > 0 ? (
+                  <rect key={`${mi}-${year}`}
+                    x={barX(mi, yi)} y={barY(v)}
+                    width={barW} height={h}
+                    rx="2" fill={color} fillOpacity="0.85"
+                  />
+                ) : null;
+              })
+            )}
             {/* Month labels */}
             {MONTH_LABELS.map((lbl, i) => (
-              <text key={i} x={xPos(i)} y={H - 8} textAnchor="middle" fontSize="9" fill="#94a3b8">{lbl}</text>
+              <text key={i} x={PL + i * groupW + groupW / 2} y={H - 8} textAnchor="middle" fontSize="9" fill="#94a3b8">{lbl}</text>
             ))}
-            {/* Area fill per year */}
-            {visibleYears.map((year, yi) => {
-              const color = YEAR_COLORS[years.indexOf(year) % YEAR_COLORS.length];
-              const areaPath = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${xPos(i)},${yScale(d[year] || 0)}`).join(' ')
-                + ` L${xPos(11)},${PT + chartH} L${xPos(0)},${PT + chartH} Z`;
-              return <path key={year} d={areaPath} fill={color} fillOpacity="0.07" />;
-            })}
-            {/* Lines per year */}
-            {visibleYears.map((year, yi) => {
-              const color = YEAR_COLORS[years.indexOf(year) % YEAR_COLORS.length];
-              return (
-                <g key={year}>
-                  <path d={linePath(year)} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-                  {data.map((d, i) => (
-                    d[year] > 0 && <circle key={i} cx={xPos(i)} cy={yScale(d[year] || 0)} r="3" fill={color} />
-                  ))}
-                </g>
-              );
-            })}
           </svg>
         </div>
       )}
