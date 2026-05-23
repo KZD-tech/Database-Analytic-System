@@ -234,64 +234,116 @@ export function SourceDonutChart() {
   );
 }
 
+const YEAR_COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316','#ec4899'];
+
 export function YoyChart() {
-  const [result, setResult] = useState({ data: [], current_year: new Date().getFullYear(), previous_year: new Date().getFullYear() - 1 });
+  const [result, setResult] = useState({ years: [], data: [] });
   const [loading, setLoading] = useState(true);
+  const [hidden, setHidden] = useState(new Set());
 
   useEffect(() => {
     getYoyComparison().then(r => { setResult(r); setLoading(false); });
   }, []);
 
-  const { data, current_year, previous_year } = result;
-  const W = 560, H = 220, PL = 60, PR = 16, PT = 16, PB = 36;
+  const { years, data } = result;
+  const visibleYears = years.filter(y => !hidden.has(y));
+
+  const toggleYear = (y) => setHidden(prev => {
+    const next = new Set(prev);
+    next.has(y) ? next.delete(y) : next.add(y);
+    return next;
+  });
+
+  const W = 560, H = 240, PL = 64, PR = 16, PT = 20, PB = 36;
   const chartW = W - PL - PR;
   const chartH = H - PT - PB;
-  const maxVal = data.length ? Math.max(...data.map(d => Math.max(d.current, d.previous)), 1) : 1;
-  const groupW = chartW / (data.length || 1);
-  const barW = Math.max(5, groupW * 0.35);
-  const xCur = (i) => PL + i * groupW + groupW * 0.2;
-  const xPrev = (i) => PL + i * groupW + groupW * 0.2 + barW + 3;
+
+  const maxVal = data.length && visibleYears.length
+    ? Math.max(...data.map(d => Math.max(...visibleYears.map(y => d[y] || 0))), 1)
+    : 1;
+
+  const xPos = (i) => PL + (i / 11) * chartW;
   const yScale = (v) => PT + chartH - (v / maxVal) * chartH;
-  const barH = (v) => Math.max(0, (v / maxVal) * chartH);
-  const fmtK = (v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v));
+  const fmtK = (v) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v));
+
+  const linePath = (year) => data
+    .map((d, i) => `${i === 0 ? 'M' : 'L'}${xPos(i)},${yScale(d[year] || 0)}`)
+    .join(' ');
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50">
-          <BarChart2 className="h-5 w-5 text-amber-500" />
+    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 xl:col-span-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50">
+            <BarChart2 className="h-5 w-5 text-amber-500" />
+          </div>
+          <div>
+            <p className="font-bold text-slate-900 text-sm">Year-over-Year Comparison</p>
+            <p className="text-xs text-slate-400">Monthly donation totals — all years in data</p>
+          </div>
         </div>
-        <div>
-          <p className="font-bold text-slate-900 text-sm">Year-over-Year Comparison</p>
-          <p className="text-xs text-slate-400">Monthly donations: {current_year} vs {previous_year}</p>
-        </div>
+        {/* Year toggles */}
+        {years.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {years.map((y, i) => {
+              const color = YEAR_COLORS[i % YEAR_COLORS.length];
+              const isHidden = hidden.has(y);
+              return (
+                <button
+                  key={y}
+                  type="button"
+                  onClick={() => toggleYear(y)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${isHidden ? 'border-slate-200 bg-slate-50 text-slate-400' : 'border-transparent text-white'}`}
+                  style={isHidden ? {} : { backgroundColor: color }}
+                >
+                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: isHidden ? '#cbd5e1' : '#fff' }} />
+                  {y}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
+
       {loading ? (
         <div className="flex items-center justify-center h-56 text-slate-400 text-sm">Loading…</div>
+      ) : data.length === 0 ? (
+        <div className="flex items-center justify-center h-56 text-slate-400 text-sm">No data available</div>
       ) : (
-        <>
-          <div className="flex items-center gap-4 mb-3 text-xs text-slate-500">
-            <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-blue-400" />{current_year}</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-slate-300" />{previous_year}</span>
-          </div>
-          <div className="overflow-x-auto">
-            <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 360 }}>
-              {[0, 0.25, 0.5, 0.75, 1].map(t => (
-                <g key={t}>
-                  <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" />
-                  <text x={PL - 4} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9" fill="#94a3b8">{fmtK(maxVal * t)}</text>
+        <div className="overflow-x-auto">
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 360 }}>
+            {/* Grid lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map(t => (
+              <g key={t}>
+                <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" />
+                <text x={PL - 6} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9" fill="#94a3b8">{fmtK(maxVal * t)}</text>
+              </g>
+            ))}
+            {/* Month labels */}
+            {MONTH_LABELS.map((lbl, i) => (
+              <text key={i} x={xPos(i)} y={H - 8} textAnchor="middle" fontSize="9" fill="#94a3b8">{lbl}</text>
+            ))}
+            {/* Area fill per year */}
+            {visibleYears.map((year, yi) => {
+              const color = YEAR_COLORS[years.indexOf(year) % YEAR_COLORS.length];
+              const areaPath = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${xPos(i)},${yScale(d[year] || 0)}`).join(' ')
+                + ` L${xPos(11)},${PT + chartH} L${xPos(0)},${PT + chartH} Z`;
+              return <path key={year} d={areaPath} fill={color} fillOpacity="0.07" />;
+            })}
+            {/* Lines per year */}
+            {visibleYears.map((year, yi) => {
+              const color = YEAR_COLORS[years.indexOf(year) % YEAR_COLORS.length];
+              return (
+                <g key={year}>
+                  <path d={linePath(year)} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+                  {data.map((d, i) => (
+                    d[year] > 0 && <circle key={i} cx={xPos(i)} cy={yScale(d[year] || 0)} r="3" fill={color} />
+                  ))}
                 </g>
-              ))}
-              {data.map((d, i) => (
-                <g key={i}>
-                  <rect x={xCur(i)} y={yScale(d.current)} width={barW} height={barH(d.current)} rx="3" fill="#93c5fd" />
-                  <rect x={xPrev(i)} y={yScale(d.previous)} width={barW} height={barH(d.previous)} rx="3" fill="#cbd5e1" />
-                  <text x={PL + i * groupW + groupW / 2} y={H - 6} textAnchor="middle" fontSize="9" fill="#94a3b8">{MONTH_LABELS[i]}</text>
-                </g>
-              ))}
-            </svg>
-          </div>
-        </>
+              );
+            })}
+          </svg>
+        </div>
       )}
     </div>
   );

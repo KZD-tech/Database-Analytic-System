@@ -1415,24 +1415,31 @@ app.get('/api/charts/source-breakdown', async (req, res) => {
 });
 
 app.get('/api/charts/yoy-comparison', async (req, res) => {
-  const now = new Date();
-  const curYear = now.getFullYear();
-  const prevYear = curYear - 1;
-  const rows = [];
+  const { data: donations, error } = await supabase
+    .from('donations')
+    .select('donation_date, amount')
+    .not('donation_date', 'is', null)
+    .limit(200000);
 
-  for (let m = 1; m <= 12; m++) {
-    const mon = String(m).padStart(2, '0');
-    const getTotal = async (year, month) => {
-      const lastDay = new Date(year, month, 0).getDate();
-      const { data } = await supabase.from('donations').select('amount')
-        .gte('donation_date', `${year}-${month}-01`)
-        .lte('donation_date', `${year}-${month}-${String(lastDay).padStart(2, '0')}`).limit(50000);
-      return (data || []).reduce((s, d) => s + Number(d.amount || 0), 0);
-    };
-    const [cur, prev] = await Promise.all([getTotal(curYear, mon), getTotal(prevYear, mon)]);
-    rows.push({ month: mon, current: Number(cur.toFixed(2)), previous: Number(prev.toFixed(2)) });
+  if (error) return res.status(500).json({ error: error.message });
+
+  const yearMonthTotals = {};
+  for (const d of (donations || [])) {
+    const date = new Date(d.donation_date);
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    if (!yearMonthTotals[year]) yearMonthTotals[year] = new Array(12).fill(0);
+    yearMonthTotals[year][month] += Number(d.amount || 0);
   }
-  res.json({ current_year: curYear, previous_year: prevYear, data: rows });
+
+  const years = Object.keys(yearMonthTotals).map(Number).sort();
+  const data = Array.from({ length: 12 }, (_, i) => {
+    const entry = { month: String(i + 1).padStart(2, '0') };
+    for (const year of years) entry[year] = Number((yearMonthTotals[year]?.[i] || 0).toFixed(2));
+    return entry;
+  });
+
+  res.json({ years, data });
 });
 
 // ─── Static files ─────────────────────────────────────────────────────────────
