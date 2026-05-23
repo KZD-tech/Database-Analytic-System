@@ -6,6 +6,12 @@ import { DonorGrowthChart, NewVsReturningChart, SourceDonutChart, YoyChart } fro
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-MY');
 const fmtRM = (n) => `RM ${Number(n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtShort = (n) => {
+  const v = Number(n || 0);
+  if (v >= 1000000) return `RM ${(v / 1000000).toFixed(2)}M`;
+  if (v >= 1000) return `RM ${(v / 1000).toFixed(1)}K`;
+  return `RM ${v.toFixed(2)}`;
+};
 
 const statusBadges = {
   active: 'bg-emerald-100 text-emerald-700',
@@ -129,15 +135,17 @@ const STAT_CARDS = [
     icon: Banknote,
     iconBg: 'bg-emerald-500',
     iconColor: 'text-white',
-    valueFn: (s) => fmtRM(s.total_collection),
+    valueFn: (s) => fmtShort(s.total_collection),
+    subFn: (s) => fmtRM(s.total_collection),
   },
   {
     key: 'aov',
-    label: 'Average Donation',
+    label: 'Avg Donation',
     icon: TrendingUp,
     iconBg: 'bg-violet-500',
     iconColor: 'text-white',
-    valueFn: (s) => fmtRM(s.avg_order_value),
+    valueFn: (s) => fmtShort(s.avg_order_value),
+    subFn: (s) => fmtRM(s.avg_order_value),
   },
   {
     key: 'transactions',
@@ -267,14 +275,17 @@ export default function Dashboard({ summary, loading: appLoading }) {
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {STAT_CARDS.map((card) => (
-          <div key={card.key} className="flex items-center gap-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-            <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${card.iconBg}`}>
-              <card.icon className={`h-6 w-6 ${card.iconColor}`} />
+          <div key={card.key} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{card.label}</p>
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${card.iconBg}`}>
+                <card.icon className={`h-4 w-4 ${card.iconColor}`} />
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 truncate">{card.label}</p>
-              <p className="mt-1.5 text-2xl font-bold text-slate-900 leading-none">{card.valueFn(summary)}</p>
-            </div>
+            <p className="text-2xl font-bold text-slate-900 leading-none truncate">{card.valueFn(summary)}</p>
+            {card.subFn && (
+              <p className="mt-1 text-xs text-slate-400 truncate">{card.subFn(summary)}</p>
+            )}
           </div>
         ))}
       </div>
