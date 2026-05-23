@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Download, Search, Users, Banknote, TrendingUp, Receipt, PlusCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react';
 import { getCustomers, getDonationChart } from '../services/api';
-import { DonorGrowthChart, NewVsReturningChart, SourceDonutChart, YoyChart } from './Charts';
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-MY');
 const fmtRM = (n) => `RM ${Number(n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -98,26 +97,6 @@ const pieChartData = (summary) => {
   return { slices, paths, total };
 };
 
-const CHART_PERIODS = [
-  { key: 'all', label: 'ALL' },
-  { key: '3m',  label: '3M' },
-  { key: '6m',  label: '6M' },
-  { key: '1y',  label: '1Y' },
-];
-
-const getPeriodDates = (period) => {
-  if (period === 'all') return { from: '', to: '' };
-  const now = new Date();
-  const from = new Date(now);
-  if (period === '3m') from.setMonth(from.getMonth() - 3);
-  else if (period === '6m') from.setMonth(from.getMonth() - 6);
-  else if (period === '1y') from.setFullYear(from.getFullYear() - 1);
-  return {
-    from: from.toISOString().slice(0, 10),
-    to: now.toISOString().slice(0, 10),
-  };
-};
-
 const PER_PAGE = 50;
 
 const STAT_CARDS = [
@@ -165,7 +144,6 @@ export default function Dashboard({ summary, loading: appLoading }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [sourceFilter] = useState('all');
   const [page, setPage] = useState(1);
-  const [chartPeriod, setChartPeriod] = useState('all');
 
   const [customersData, setCustomersData] = useState({ customers: [], total: 0, page: 1, per_page: PER_PAGE, total_pages: 0 });
   const [tableLoading, setTableLoading] = useState(false);
@@ -198,15 +176,14 @@ export default function Dashboard({ summary, loading: appLoading }) {
 
   useEffect(() => {
     setChartLoading(true);
-    const { from, to } = getPeriodDates(chartPeriod);
     const params = {};
-    if (from) params.from_date = from;
-    if (to) params.to_date = to;
+    if (startDate) params.from_date = startDate;
+    if (endDate) params.to_date = endDate;
     getDonationChart(params).then((data) => {
       setChartSeries(data || []);
       setChartLoading(false);
     });
-  }, [chartPeriod]);
+  }, [startDate, endDate]);
 
   const barData = barChartData(chartSeries.length > 0 ? chartSeries : [{ label: '—', value: 0 }]);
 
@@ -358,27 +335,14 @@ export default function Dashboard({ summary, loading: appLoading }) {
       <div className="grid gap-6 xl:grid-cols-[1fr_280px]">
         {/* Bar chart */}
         <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Donations</p>
-              <h3 className="mt-1 text-base font-bold text-slate-900">Monthly Totals</h3>
-            </div>
-            <div className="flex items-center rounded-xl bg-slate-100 p-1 gap-0.5 self-start">
-              {CHART_PERIODS.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  onClick={() => setChartPeriod(p.key)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                    chartPeriod === p.key
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+          <div className="mb-5">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Donations</p>
+            <h3 className="mt-1 text-base font-bold text-slate-900">Monthly Totals</h3>
+            {(startDate || endDate) && (
+              <p className="mt-0.5 text-xs text-slate-400">
+                {startDate || '—'} → {endDate || '—'}
+              </p>
+            )}
           </div>
 
           {chartLoading ? (
@@ -457,14 +421,6 @@ export default function Dashboard({ summary, loading: appLoading }) {
             );
           })()}
         </div>
-      </div>
-
-      {/* Advanced charts */}
-      <div className="grid gap-6 xl:grid-cols-2">
-        <DonorGrowthChart />
-        <NewVsReturningChart />
-        <SourceDonutChart />
-        <YoyChart />
       </div>
 
       {/* Filter bar */}
