@@ -12,9 +12,11 @@ import WebhooksPanel from './components/WebhooksPanel';
 import Analytics from './components/Analytics';
 import Charts from './components/Charts';
 import Duplicates from './components/Duplicates';
+import Donors from './components/Donors';
 
 const PAGE_TITLES = {
   '/': { title: 'Dashboard', breadcrumb: 'Home / Dashboard' },
+  '/donors': { title: 'Donors', breadcrumb: 'Home / Donors' },
   '/analytics': { title: 'Analytics', breadcrumb: 'Home / Analytics' },
   '/duplicates': { title: 'Duplicate Donors', breadcrumb: 'Home / Duplicate Donors' },
   '/order-input': { title: 'Add Donation', breadcrumb: 'Home / Add Donation' },
@@ -57,7 +59,7 @@ function SidebarContent({ location, isAdmin, isManagerOrAbove, adminToken, curre
           <p className="px-3 mb-2 text-[10px] font-bold tracking-[0.18em] uppercase text-slate-400">General</p>
           <div className="space-y-0.5">
             <NavItem to="/" icon={LayoutDashboard} label="Dashboard" active={location.pathname === '/'} onClick={onNavClick} />
-            <NavItem to="/" icon={Users} label="Donors" active={false} onClick={onNavClick} />
+            <NavItem to="/donors" icon={Users} label="Donors" active={location.pathname === '/donors'} onClick={onNavClick} />
             <NavItem to="/analytics" icon={BarChart2} label="Analytics" active={location.pathname === '/analytics'} onClick={onNavClick} />
             <NavItem to="/charts" icon={LineChart} label="Charts" active={location.pathname === '/charts'} onClick={onNavClick} />
           </div>
@@ -268,6 +270,7 @@ function App() {
         <main className="flex-1 p-4 lg:p-8">
           <Routes>
             <Route path="/" element={<PrivateRoute><Dashboard summary={summary} loading={loading} onLogout={handleLogout} currentUser={currentUser} /></PrivateRoute>} />
+            <Route path="/donors" element={<PrivateRoute><Donors /></PrivateRoute>} />
             <Route path="/charts" element={<PrivateRoute><Charts /></PrivateRoute>} />
             <Route path="/duplicates" element={<PrivateRoute minRole="manager"><Duplicates /></PrivateRoute>} />
             <Route path="/analytics" element={<PrivateRoute><Analytics /></PrivateRoute>} />
