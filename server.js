@@ -617,9 +617,12 @@ app.get('/api/staff', async (req, res) => {
 });
 
 app.post('/api/staff', requireAuth('manager'), async (req, res) => {
-  const { full_name, email, role } = req.body;
+  const { full_name, email, role, password } = req.body;
   if (!full_name || !email) {
     return res.status(400).json({ error: 'Nama dan emel diperlukan.' });
+  }
+  if (!password || password.trim().length < 6) {
+    return res.status(400).json({ error: 'Kata laluan mesti sekurang-kurangnya 6 aksara.' });
   }
 
   const { data: existing } = await supabase.from('users').select('id').eq('email', email).maybeSingle();
@@ -628,9 +631,7 @@ app.post('/api/staff', requireAuth('manager'), async (req, res) => {
   }
 
   const now = new Date().toISOString();
-  // Generate a temporary password (user should reset via admin panel)
-  const tempPassword = randomBytes(8).toString('hex');
-  const password_hash = hashPassword(tempPassword);
+  const password_hash = hashPassword(password.trim());
 
   const { data, error } = await supabase.from('users').insert([{
     full_name,
@@ -647,6 +648,14 @@ app.post('/api/staff', requireAuth('manager'), async (req, res) => {
   }
 
   res.json(parseStaffRow(data));
+});
+
+app.delete('/api/staff/:id', requireAuth('manager'), async (req, res) => {
+  const id = req.params.id;
+  const now = new Date().toISOString();
+  const { error } = await supabase.from('users').update({ active: false, updated_at: now }).eq('id', id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
 });
 
 // ─── donor_summary row mapper ─────────────────────────────────────────────────

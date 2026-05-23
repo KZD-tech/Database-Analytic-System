@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, User, Mail, CheckCircle2, XCircle } from 'lucide-react';
-import { createStaff, getStaff } from '../services/api';
+import { Plus, User, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
+import { createStaff, getStaff, deleteStaff } from '../services/api';
 
 const roles = [
   { value: 'admin', label: 'Admin' },
@@ -14,8 +14,9 @@ export default function StaffPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [form, setForm] = useState({ full_name: '', email: '', role: 'manager' });
+  const [form, setForm] = useState({ full_name: '', email: '', role: 'manager', password: '' });
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const loadStaff = async () => {
     setLoading(true);
@@ -30,9 +31,7 @@ export default function StaffPanel() {
     }
   };
 
-  useEffect(() => {
-    loadStaff();
-  }, []);
+  useEffect(() => { loadStaff(); }, []);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -43,22 +42,37 @@ export default function StaffPanel() {
     event.preventDefault();
     setError('');
     setSuccess('');
-
     if (!form.full_name || !form.email) {
       setError('Please complete staff name and email.');
       return;
     }
-
+    if (!form.password || form.password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
     setSaving(true);
     try {
       await createStaff(form);
       setSuccess('New staff member added successfully.');
-      setForm({ full_name: '', email: '', role: 'manager' });
+      setForm({ full_name: '', email: '', role: 'manager', password: '' });
       await loadStaff();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to add staff.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Deactivate this staff member?')) return;
+    setDeletingId(id);
+    try {
+      await deleteStaff(id);
+      await loadStaff();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to remove staff.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -78,6 +92,7 @@ export default function StaffPanel() {
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          {/* Staff list */}
           <div className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
               <p className="text-sm font-semibold text-slate-900">Staff List</p>
@@ -93,32 +108,42 @@ export default function StaffPanel() {
                     <th className="px-4 py-3 font-semibold">Role</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
                     <th className="px-4 py-3 font-semibold">Date Added</th>
+                    <th className="px-4 py-3 font-semibold"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white">
                   {loading ? (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-6 text-center text-slate-500">Loading...</td>
-                    </tr>
+                    <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-500">Loading...</td></tr>
                   ) : staff.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-6 text-center text-slate-500">No staff registered.</td>
-                    </tr>
+                    <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-500">No staff registered.</td></tr>
                   ) : (
                     staff.map((user) => (
                       <tr key={user.id} className="hover:bg-slate-50">
                         <td className="px-4 py-4 font-medium text-slate-900">{user.full_name}</td>
                         <td className="px-4 py-4 text-slate-600">{user.email}</td>
                         <td className="px-4 py-4 text-slate-600 capitalize">{user.role}</td>
-                        <td className="px-4 py-4 text-slate-600 flex items-center gap-2">
-                          {user.active ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                          ) : (
-                            <XCircle className="h-4 w-4 text-rose-500" />
-                          )}
-                          {user.active ? 'Active' : 'Inactive'}
+                        <td className="px-4 py-4">
+                          <span className={`inline-flex items-center gap-1.5 text-sm ${user.active ? 'text-emerald-600' : 'text-rose-500'}`}>
+                            {user.active
+                              ? <CheckCircle2 className="h-4 w-4" />
+                              : <XCircle className="h-4 w-4" />}
+                            {user.active ? 'Active' : 'Inactive'}
+                          </span>
                         </td>
                         <td className="px-4 py-4 text-slate-500">{new Date(user.created_at).toLocaleDateString('en-MY')}</td>
+                        <td className="px-4 py-4 text-right">
+                          {user.active && (
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(user.id)}
+                              disabled={deletingId === user.id}
+                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              {deletingId === user.id ? '...' : 'Remove'}
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))
                   )}
@@ -127,6 +152,7 @@ export default function StaffPanel() {
             </div>
           </div>
 
+          {/* Add staff form */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
             <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Add new staff</p>
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -147,6 +173,18 @@ export default function StaffPanel() {
                   type="email"
                   value={form.email}
                   onChange={handleChange}
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700">Password</label>
+                <input
+                  name="password"
+                  type="password"
+                  value={form.password}
+                  onChange={handleChange}
+                  placeholder="Min. 6 characters"
                   className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
                 />
               </div>
@@ -175,15 +213,10 @@ export default function StaffPanel() {
               </button>
 
               {error && (
-                <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">
-                  {error}
-                </div>
+                <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">{error}</div>
               )}
               {success && (
-                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 ring-1 ring-emerald-200">
-                  {success}
-                  <p className="mt-1 text-xs">A temporary password has been generated. Change the password via the Users panel.</p>
-                </div>
+                <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 ring-1 ring-emerald-200">{success}</div>
               )}
             </form>
           </div>
