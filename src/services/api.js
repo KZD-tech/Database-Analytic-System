@@ -53,6 +53,10 @@ export function createStaff(payload) {
   return api.post('/staff', payload).then((res) => res.data);
 }
 
+export function deleteStaff(id) {
+  return api.delete(`/staff/${id}`).then((res) => res.data);
+}
+
 export function bulkUploadOrders(csvContent) {
   return api.post('/orders/bulk-upload', { csv: csvContent }).then((res) => res.data);
 }
