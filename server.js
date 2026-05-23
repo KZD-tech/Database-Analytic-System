@@ -700,47 +700,12 @@ function parseSummaryRow(row) {
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 app.get('/api/summary', async (req, res) => {
-  // Get total donor count without fetching all rows
-  const { count: totalCount, error: countError } = await supabase
-    .from('donor_summary')
-    .select('*', { count: 'exact', head: true });
-
-  if (countError) return res.status(500).json({ error: countError.message });
-
-  // Paginate through all rows to compute accurate aggregate totals
-  let totalCollection = 0;
-  let totalTransactions = 0;
-  const statusCounts = { active: 0, repeat: 0, dormant: 0, churn: 0, new: 0 };
-  const batchSize = 1000;
-
-  for (let offset = 0; offset < (totalCount || 0); offset += batchSize) {
-    const { data: batch, error: batchError } = await supabase
-      .from('donor_summary')
-      .select('kekerapan, jumlah_keseluruhan, tarikh_sumbangan_terkini')
-      .range(offset, offset + batchSize - 1);
-
-    if (batchError) return res.status(500).json({ error: batchError.message });
-
-    (batch || []).forEach((row) => {
-      const kekerapan = Number(row.kekerapan || 0);
-      totalCollection += Number(row.jumlah_keseluruhan || 0);
-      totalTransactions += kekerapan;
-      const status = computeStatus(row.tarikh_sumbangan_terkini, kekerapan);
-      statusCounts[status] = (statusCounts[status] || 0) + 1;
-    });
+  const { data, error } = await supabase.rpc('get_dashboard_stats');
+  if (error) {
+    // Fallback: function not yet created in Supabase
+    return res.status(500).json({ error: 'Dashboard stats function not found. Run get_dashboard_stats() SQL in Supabase first. ' + error.message });
   }
-
-  const avgDonationValue = totalTransactions > 0
-    ? Number((totalCollection / totalTransactions).toFixed(2))
-    : 0;
-
-  res.json({
-    total: totalCount || 0,
-    total_collection: Number(totalCollection.toFixed(2)),
-    total_transactions: totalTransactions,
-    avg_order_value: avgDonationValue,
-    ...statusCounts
-  });
+  res.json(data);
 });
 
 // ─── Donation chart (monthly aggregation) ────────────────────────────────────
