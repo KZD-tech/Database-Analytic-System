@@ -90,20 +90,19 @@ export default function Donors() {
 
   useEffect(() => {
     const params = { page, per_page: PER_PAGE };
-    if (search)   params.search    = search;
-    if (status !== 'all') params.status = status;
-    if (fromDate) params.from_date = fromDate;
-    if (toDate)   params.to_date   = toDate;
+    if (search)              params.search    = search;
+    if (status !== 'all')    params.status    = status;
+    if (source !== 'all')    params.source    = source;
+    if (highvalue !== 'all') params.highvalue = highvalue;
+    if (fromDate)            params.from_date = fromDate;
+    if (toDate)              params.to_date   = toDate;
     fetch(params);
-  }, [page, search, status, fromDate, toDate, fetch]);
+  }, [page, search, status, source, highvalue, fromDate, toDate, fetch]);
 
   // Reset page on filter change
   useEffect(() => { setPage(1); }, [search, status, source, highvalue, fromDate, toDate]);
 
-  // Client-side filter: source + highvalue (not in API)
   let customers = data.customers || [];
-  if (source !== 'all')    customers = customers.filter(c => (c.source || '').toLowerCase() === source.toLowerCase());
-  if (highvalue !== 'all') customers = customers.filter(c => c.highvalue === highvalue);
 
   // Client-side sort
   if (sortCol) {
@@ -188,10 +187,10 @@ export default function Donors() {
 
       {/* Filter bar */}
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4">
+        <div className="flex flex-wrap gap-3">
 
           {/* Search */}
-          <div className="relative lg:col-span-2">
+          <div className="relative min-w-[200px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
