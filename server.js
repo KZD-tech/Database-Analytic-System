@@ -235,7 +235,7 @@ async function upsertDonor({ name, phone, email }) {
     existing = (data && data.length > 0) ? data[0] : null;
   }
   if (!existing && email) {
-    const { data } = await supabase.from('donors').select('*').eq('email', email).limit(1);
+    const { data } = await supabase.from('donors').select('*').eq('email', email.toLowerCase()).limit(1);
     existing = (data && data.length > 0) ? data[0] : null;
   }
 
@@ -243,13 +243,20 @@ async function upsertDonor({ name, phone, email }) {
     return { donorId: existing.id, isNew: false, donor: existing };
   }
 
-  const now = new Date().toISOString();
-  const { data: newDonor } = await supabase.from('donors').insert([{
+  const { data: newDonor, error } = await supabase.from('donors').insert([{
     name: name || 'Unknown',
     phone: phone || null,
-    email: email || null,
-    created_at: now
+    email: email ? email.toLowerCase() : null,
   }]).select('*').single();
+
+  // If UNIQUE violation (race condition), fetch existing
+  if (error?.code === '23505') {
+    const key = phone ? { phone } : { email: email.toLowerCase() };
+    const field = phone ? 'phone' : 'email';
+    const { data: retry } = await supabase.from('donors').select('*').eq(field, key[field]).limit(1);
+    const found = retry?.[0];
+    return { donorId: found?.id, isNew: false, donor: found };
+  }
 
   return { donorId: newDonor?.id, isNew: true, donor: newDonor };
 }
@@ -866,8 +873,9 @@ app.put('/api/customers/:id', requireAuth('editor'), async (req, res) => {
 
   const { error: updateError } = await supabase.from('donors').update({
     name: full_name,
-    phone: phone || '',
-    email: email || ''
+    phone: phone || null,
+    email: email ? email.toLowerCase() : null,
+    updated_at: new Date().toISOString()
   }).eq('id', id);
 
   if (updateError) {
@@ -1003,7 +1011,7 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
           chunkDonorKeys.push({ type: 'new', idx: pendingIdx });
         } else {
           const idx = newDonors.length;
-          newDonors.push({ name: row.name || 'Unknown', phone: phone || null, email: email || null, created_at: now });
+          newDonors.push({ name: row.name || 'Unknown', phone: phone || null, email: email || null });
           chunkDonorKeys.push({ type: 'new', idx });
           if (phone) phoneMap[phone] = idx;
           if (email) emailMap[email] = idx;
@@ -1011,12 +1019,43 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
       }
     }
 
-    // Insert new donors for this chunk
+    // Insert new donors — on UNIQUE conflict (duplicate phone/email), ignore and re-fetch
     let insertedDonors = [];
     if (newDonors.length > 0) {
-      const { data, error } = await supabase.from('donors').insert(newDonors).select('id');
-      if (error) return res.status(500).json({ error: `Insert donors: ${error.message}` });
-      insertedDonors = data || [];
+      const { data, error } = await supabase.from('donors').insert(newDonors).select('id, phone, email');
+      if (error && error.code !== '23505') {
+        return res.status(500).json({ error: `Insert donors: ${error.message}` });
+      }
+      if (error?.code === '23505') {
+        // Conflict — re-fetch all by phone/email to get their IDs
+        const allPhones = newDonors.map((d) => d.phone).filter(Boolean);
+        const allEmails = newDonors.map((d) => d.email).filter(Boolean);
+        const refetched = [];
+        if (allPhones.length) {
+          const { data: byPhone } = await supabase.from('donors').select('id, phone, email').in('phone', allPhones);
+          refetched.push(...(byPhone || []));
+        }
+        if (allEmails.length) {
+          const { data: byEmail } = await supabase.from('donors').select('id, phone, email').in('email', allEmails);
+          refetched.push(...(byEmail || []));
+        }
+        insertedDonors = refetched;
+        refetched.forEach((d) => {
+          if (d.phone) phoneMap[d.phone] = d.id;
+          if (d.email) emailMap[d.email] = d.id;
+        });
+        // Re-map chunkDonorKeys to use fetched IDs
+        chunkDonorKeys.forEach((k, i) => {
+          if (k.type === 'new') {
+            const nd = newDonors[k.idx];
+            const resolvedId = (nd.phone && phoneMap[nd.phone] && typeof phoneMap[nd.phone] !== 'number' ? phoneMap[nd.phone] : null)
+              ?? (nd.email && emailMap[nd.email] && typeof emailMap[nd.email] !== 'number' ? emailMap[nd.email] : null);
+            if (resolvedId) chunkDonorKeys[i] = { type: 'existing', id: resolvedId };
+          }
+        });
+      } else {
+        insertedDonors = data || [];
+      }
     }
 
     // Build donor IDs and insert donations
