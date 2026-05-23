@@ -515,8 +515,8 @@ export default function Dashboard({ summary, loading: appLoading }) {
                     <td className="px-5 py-4">{customer.last_purchase_date || '—'}</td>
                     <td className="px-5 py-4">{fmtRM(customer.aov)}</td>
                     <td className="px-5 py-4">
-                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${customer.highvalue === 'Ya' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {customer.highvalue || 'Tidak'}
+                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${customer.highvalue === 'Yes' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {customer.highvalue || 'No'}
                       </span>
                     </td>
                     <td className="px-5 py-4">
