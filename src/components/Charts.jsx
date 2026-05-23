@@ -20,7 +20,7 @@ export function DonorGrowthChart() {
     getDonorGrowthChart({ months }).then(rows => { setData(rows); setLoading(false); });
   }, [months]);
 
-  const W = 560, H = 220, PL = 56, PR = 16, PT = 16, PB = 36;
+  const W = 900, H = 300, PL = 56, PR = 16, PT = 16, PB = 36;
   const chartW = W - PL - PR;
   const chartH = H - PT - PB;
   const maxNew = data.length ? Math.max(...data.map(d => d.new_donors), 1) : 1;
@@ -97,7 +97,7 @@ export function NewVsReturningChart() {
     getNewVsReturningChart({ months }).then(rows => { setData(rows); setLoading(false); });
   }, [months]);
 
-  const W = 560, H = 220, PL = 40, PR = 16, PT = 16, PB = 36;
+  const W = 900, H = 300, PL = 40, PR = 16, PT = 16, PB = 36;
   const chartW = W - PL - PR;
   const chartH = H - PT - PB;
   const maxVal = data.length ? Math.max(...data.map(d => d.new + d.returning), 1) : 1;
@@ -273,7 +273,7 @@ export function YoyChart() {
   const barY = (v) => PT + chartH - barH(v);
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 xl:col-span-2">
+    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50">
@@ -357,7 +357,7 @@ export default function Charts() {
           Refresh all
         </button>
       </div>
-      <div key={key} className="grid gap-6 xl:grid-cols-2">
+      <div key={key} className="space-y-6">
         <DonorGrowthChart />
         <NewVsReturningChart />
         <SourceDonutChart />
