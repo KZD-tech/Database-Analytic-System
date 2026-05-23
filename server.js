@@ -788,7 +788,7 @@ app.get('/api/donations/chart', async (req, res) => {
 // ─── Customers (donors) ───────────────────────────────────────────────────────
 
 app.get('/api/customers', async (req, res) => {
-  const { search, status, source, from_date, to_date } = req.query;
+  const { search, status, source, highvalue, from_date, to_date } = req.query;
   let page = Math.max(1, parseInt(req.query.page, 10) || 1);
   let perPage = Math.min(200, Math.max(1, parseInt(req.query.per_page, 10) || 50));
 
@@ -797,6 +797,14 @@ app.get('/api/customers', async (req, res) => {
 
   if (search) {
     query = query.or(`nama.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+  }
+
+  if (source && source !== 'all') {
+    query = query.eq('source', source);
+  }
+
+  if (highvalue && highvalue !== 'all') {
+    query = query.eq('highvalue', highvalue);
   }
 
   if (from_date) {
@@ -1246,7 +1254,7 @@ app.get('/api/top-donors', async (req, res) => {
 
 app.get('/api/campaigns', async (req, res) => {
   const { data, error } = await supabase
-    .from('donations').select('campaign_name').not('campaign_name', 'is', null).neq('campaign_name', '').limit(2000);
+    .from('donations').select('campaign_name').not('campaign_name', 'is', null).neq('campaign_name', '').limit(50000);
   if (error) return res.status(500).json({ error: error.message });
   const unique = [...new Set((data || []).map((d) => d.campaign_name))].sort();
   res.json(unique);
