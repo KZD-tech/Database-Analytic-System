@@ -124,9 +124,10 @@ function parseDonorRow(row) {
 function computeStatus(lastDonationDate, totalDonations) {
   if (!lastDonationDate || totalDonations === 0) return 'new';
   const daysSince = Math.floor((new Date() - new Date(lastDonationDate)) / (1000 * 60 * 60 * 24));
-  if (daysSince > 180) return 'churn';
+  if (daysSince > 365) return 'churn';
   if (daysSince > 90) return 'dormant';
   if (totalDonations >= 2) return 'repeat';
+  if (daysSince <= 30) return 'new';
   return 'active';
 }
 
@@ -1253,32 +1254,49 @@ app.get('/api/top-donors', async (req, res) => {
 // ─── Campaign list ────────────────────────────────────────────────────────────
 
 app.get('/api/campaigns', async (req, res) => {
-  const { data, error } = await supabase
-    .from('donations').select('campaign_name').not('campaign_name', 'is', null).neq('campaign_name', '').limit(50000);
-  if (error) return res.status(500).json({ error: error.message });
-  const unique = [...new Set((data || []).map((d) => d.campaign_name))].sort();
-  res.json(unique);
+  const batchSize = 10000;
+  let from = 0;
+  const allNames = new Set();
+  while (true) {
+    const { data: batch, error } = await supabase
+      .from('donations').select('campaign_name')
+      .not('campaign_name', 'is', null).neq('campaign_name', '')
+      .range(from, from + batchSize - 1);
+    if (error) return res.status(500).json({ error: error.message });
+    (batch || []).forEach((d) => allNames.add(d.campaign_name));
+    if (!batch || batch.length < batchSize) break;
+    from += batchSize;
+  }
+  res.json([...allNames].sort());
 });
 
 // ─── Campaign chart ───────────────────────────────────────────────────────────
 
 app.get('/api/donations/campaign-chart', async (req, res) => {
   const { from_date, to_date } = req.query;
-
-  let query = supabase.from('donations').select('campaign_name, amount').limit(10000);
-  if (from_date) query = query.gte('donation_date', from_date);
-  if (to_date) query = query.lte('donation_date', to_date);
-
-  const { data: donations, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
-
+  const batchSize = 10000;
+  let offset = 0;
   const totals = {};
   const counts = {};
-  (donations || []).forEach((d) => {
-    const key = d.campaign_name || 'Uncategorized';
-    totals[key] = (totals[key] || 0) + Number(d.amount || 0);
-    counts[key] = (counts[key] || 0) + 1;
-  });
+
+  while (true) {
+    let query = supabase.from('donations').select('campaign_name, amount')
+      .range(offset, offset + batchSize - 1);
+    if (from_date) query = query.gte('donation_date', from_date);
+    if (to_date) query = query.lte('donation_date', to_date);
+
+    const { data: batch, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+
+    (batch || []).forEach((d) => {
+      const key = d.campaign_name || 'Uncategorized';
+      totals[key] = (totals[key] || 0) + Number(d.amount || 0);
+      counts[key] = (counts[key] || 0) + 1;
+    });
+
+    if (!batch || batch.length < batchSize) break;
+    offset += batchSize;
+  }
 
   res.json(
     Object.entries(totals)
@@ -1298,17 +1316,28 @@ app.get('/api/reports/monthly', async (req, res) => {
   const lastDay = new Date(year, mon, 0).getDate();
   const toDate = `${year}-${String(mon).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-  const { data: donations, error } = await supabase
-    .from('donations').select('donor_id, amount, campaign_name')
-    .gte('donation_date', fromDate).lte('donation_date', toDate).limit(10000);
-  if (error) return res.status(500).json({ error: error.message });
+  const batchSize = 10000;
+  let offset = 0;
+  let allDonations = [];
+  while (true) {
+    const { data: batch, error } = await supabase
+      .from('donations').select('donor_id, amount, campaign_name')
+      .gte('donation_date', fromDate).lte('donation_date', toDate)
+      .range(offset, offset + batchSize - 1);
+    if (error) return res.status(500).json({ error: error.message });
+    allDonations = allDonations.concat(batch || []);
+    if (!batch || batch.length < batchSize) break;
+    offset += batchSize;
+  }
+  const donations = allDonations;
 
-  const totalCollection = (donations || []).reduce((s, d) => s + Number(d.amount || 0), 0);
-  const totalTransactions = (donations || []).length;
-  const uniqueDonors = new Set((donations || []).map((d) => d.donor_id).filter(Boolean)).size;
+  const totalCollection = donations.reduce((s, d) => s + Number(d.amount || 0), 0);
+  const totalTransactions = donations.length;
+  const uniqueDonorIds = [...new Set(donations.map((d) => d.donor_id).filter(Boolean))];
+  const uniqueDonors = uniqueDonorIds.length;
 
   const campaignMap = {};
-  (donations || []).forEach((d) => {
+  donations.forEach((d) => {
     const key = d.campaign_name || 'Uncategorized';
     if (!campaignMap[key]) campaignMap[key] = { total: 0, count: 0 };
     campaignMap[key].total += Number(d.amount || 0);
@@ -1318,9 +1347,20 @@ app.get('/api/reports/monthly', async (req, res) => {
     .sort((a, b) => b[1].total - a[1].total)
     .map(([name, s]) => ({ name, total: Number(s.total.toFixed(2)), count: s.count }));
 
-  const { count: newDonors } = await supabase.from('donors')
-    .select('*', { count: 'exact', head: true })
-    .gte('created_at', `${fromDate}T00:00:00`).lte('created_at', `${toDate}T23:59:59`);
+  // Count new donors using tarikh_sumbangan_terdahulu (first donation date) from donor_summary
+  // to correctly handle bulk-uploaded historical data where created_at is the upload date
+  let newDonors = 0;
+  const chunkSize = 500;
+  for (let i = 0; i < uniqueDonorIds.length; i += chunkSize) {
+    const chunk = uniqueDonorIds.slice(i, i + chunkSize);
+    const { data: summaryRows } = await supabase
+      .from('donor_summary').select('id, tarikh_sumbangan_terdahulu')
+      .in('id', chunk);
+    (summaryRows || []).forEach((row) => {
+      const firstDate = row.tarikh_sumbangan_terdahulu;
+      if (firstDate && firstDate >= fromDate && firstDate <= toDate) newDonors++;
+    });
+  }
 
   res.json({
     month: rawMonth,
@@ -1379,16 +1419,34 @@ app.get('/api/charts/new-vs-returning', async (req, res) => {
     const lastDay = new Date(year, d.getMonth() + 1, 0).getDate();
     const to = `${year}-${mon}-${String(lastDay).padStart(2, '0')}`;
 
-    const { data: donatedThisMonth } = await supabase
-      .from('donations').select('donor_id')
-      .gte('donation_date', from).lte('donation_date', to).limit(10000);
-    const donorIds = [...new Set((donatedThisMonth || []).map(d => d.donor_id).filter(Boolean))];
+    // Paginate donations for this month to get all donor_ids
+    const batchSize = 10000;
+    let offset = 0;
+    const donorIdSet = new Set();
+    while (true) {
+      const { data: batch } = await supabase
+        .from('donations').select('donor_id')
+        .gte('donation_date', from).lte('donation_date', to)
+        .range(offset, offset + batchSize - 1);
+      (batch || []).forEach(r => { if (r.donor_id) donorIdSet.add(r.donor_id); });
+      if (!batch || batch.length < batchSize) break;
+      offset += batchSize;
+    }
+    const donorIds = [...donorIdSet];
 
+    // Check donor_summary.tarikh_sumbangan_terdahulu (first donation date) to correctly
+    // classify new vs returning — created_at is the upload date for bulk-imported data
     let newCount = 0;
-    if (donorIds.length > 0) {
-      const { count } = await supabase.from('donors').select('*', { count: 'exact', head: true })
-        .in('id', donorIds).gte('created_at', `${from}T00:00:00`).lte('created_at', `${to}T23:59:59`);
-      newCount = count || 0;
+    const chunkSize = 500;
+    for (let j = 0; j < donorIds.length; j += chunkSize) {
+      const chunk = donorIds.slice(j, j + chunkSize);
+      const { data: summaryRows } = await supabase
+        .from('donor_summary').select('id, tarikh_sumbangan_terdahulu')
+        .in('id', chunk);
+      (summaryRows || []).forEach((row) => {
+        const firstDate = row.tarikh_sumbangan_terdahulu;
+        if (firstDate && firstDate >= from && firstDate <= to) newCount++;
+      });
     }
     const returningCount = Math.max(0, donorIds.length - newCount);
     rows.push({ month: `${year}-${mon}`, new: newCount, returning: returningCount });
@@ -1397,16 +1455,26 @@ app.get('/api/charts/new-vs-returning', async (req, res) => {
 });
 
 app.get('/api/charts/source-breakdown', async (req, res) => {
-  const { data, error } = await supabase.from('donations').select('source, amount').limit(50000);
-  if (error) return res.status(500).json({ error: error.message });
-
+  const batchSize = 10000;
+  let offset = 0;
   const map = {};
-  (data || []).forEach(d => {
-    const key = (d.source || 'Unknown').trim() || 'Unknown';
-    if (!map[key]) map[key] = { count: 0, total: 0 };
-    map[key].count += 1;
-    map[key].total += Number(d.amount || 0);
-  });
+
+  while (true) {
+    const { data: batch, error } = await supabase
+      .from('donations').select('source, amount')
+      .range(offset, offset + batchSize - 1);
+    if (error) return res.status(500).json({ error: error.message });
+
+    (batch || []).forEach(d => {
+      const key = (d.source || 'Unknown').trim() || 'Unknown';
+      if (!map[key]) map[key] = { count: 0, total: 0 };
+      map[key].count += 1;
+      map[key].total += Number(d.amount || 0);
+    });
+
+    if (!batch || batch.length < batchSize) break;
+    offset += batchSize;
+  }
 
   const rows = Object.entries(map)
     .sort((a, b) => b[1].total - a[1].total)
