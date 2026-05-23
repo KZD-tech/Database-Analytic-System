@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Download, Search, Users, Banknote, TrendingUp, Receipt, PlusCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react';
+import { Download, Search, Users, Banknote, TrendingUp, Receipt, PlusCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Calendar } from 'lucide-react';
 import { getCustomers, getDonationChart } from '../services/api';
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-MY');
@@ -39,7 +39,7 @@ const statusDescriptions = {
 
 const barChartData = (series) => {
   const width = 680;
-  const height = 280;
+  const height = 360;
   const paddingLeft = 56;
   const paddingRight = 16;
   const paddingTop = 24;
@@ -97,6 +97,48 @@ const pieChartData = (summary) => {
   return { slices, paths, total };
 };
 
+const DATE_PRESETS = [
+  { key: 'all',        label: 'All time' },
+  { key: 'today',      label: 'Today' },
+  { key: 'yesterday',  label: 'Yesterday' },
+  { key: 'this_month', label: 'This month' },
+  { key: 'last_7',     label: 'Last 7 days' },
+  { key: 'last_30',    label: 'Last 30 days' },
+  { key: 'last_3m',    label: 'Last 3 months' },
+  { key: 'last_1y',    label: 'Last 12 months' },
+  { key: 'custom',     label: 'Custom range' },
+];
+
+const getPresetDates = (key) => {
+  const today = new Date();
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  if (key === 'today') return { from: fmt(today), to: fmt(today) };
+  if (key === 'yesterday') {
+    const y = new Date(today); y.setDate(y.getDate() - 1);
+    return { from: fmt(y), to: fmt(y) };
+  }
+  if (key === 'this_month') {
+    return { from: fmt(new Date(today.getFullYear(), today.getMonth(), 1)), to: fmt(today) };
+  }
+  if (key === 'last_7') {
+    const f = new Date(today); f.setDate(today.getDate() - 6);
+    return { from: fmt(f), to: fmt(today) };
+  }
+  if (key === 'last_30') {
+    const f = new Date(today); f.setDate(today.getDate() - 29);
+    return { from: fmt(f), to: fmt(today) };
+  }
+  if (key === 'last_3m') {
+    const f = new Date(today); f.setMonth(today.getMonth() - 3);
+    return { from: fmt(f), to: fmt(today) };
+  }
+  if (key === 'last_1y') {
+    const f = new Date(today); f.setFullYear(today.getFullYear() - 1);
+    return { from: fmt(f), to: fmt(today) };
+  }
+  return { from: '', to: '' };
+};
+
 const PER_PAGE = 50;
 
 const STAT_CARDS = [
@@ -138,12 +180,15 @@ const STAT_CARDS = [
 
 export default function Dashboard({ summary, loading: appLoading }) {
   const navigate = useNavigate();
+  const [datePreset, setDatePreset] = useState('all');
+  const [showDateMenu, setShowDateMenu] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sourceFilter] = useState('all');
   const [page, setPage] = useState(1);
+  const dateMenuRef = useRef(null);
 
   const [customersData, setCustomersData] = useState({ customers: [], total: 0, page: 1, per_page: PER_PAGE, total_pages: 0 });
   const [tableLoading, setTableLoading] = useState(false);
@@ -184,6 +229,25 @@ export default function Dashboard({ summary, loading: appLoading }) {
       setChartLoading(false);
     });
   }, [startDate, endDate]);
+
+  useEffect(() => {
+    if (!showDateMenu) return;
+    const handler = (e) => {
+      if (dateMenuRef.current && !dateMenuRef.current.contains(e.target)) setShowDateMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showDateMenu]);
+
+  const handlePreset = (key) => {
+    setDatePreset(key);
+    if (key !== 'custom') {
+      const { from, to } = getPresetDates(key);
+      setStartDate(from);
+      setEndDate(to);
+    }
+    setShowDateMenu(false);
+  };
 
   const barData = barChartData(chartSeries.length > 0 ? chartSeries : [{ label: '—', value: 0 }]);
 
@@ -281,21 +345,55 @@ export default function Dashboard({ summary, loading: appLoading }) {
     <div className="space-y-6">
       {/* Action bar */}
       <div className="flex flex-wrap items-center justify-end gap-3">
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-          />
-          <span className="text-slate-400 text-sm">—</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-          />
+        {/* Date preset dropdown */}
+        <div className="relative" ref={dateMenuRef}>
+          <button
+            type="button"
+            onClick={() => setShowDateMenu((v) => !v)}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            <Calendar className="h-4 w-4 text-slate-400" />
+            {DATE_PRESETS.find((p) => p.key === datePreset)?.label}
+            {datePreset !== 'all' && startDate && (
+              <span className="font-normal text-slate-400 text-xs">
+                {startDate}{endDate && endDate !== startDate ? ` – ${endDate}` : ''}
+              </span>
+            )}
+            <ChevronDown className="h-4 w-4 text-slate-400" />
+          </button>
+          {showDateMenu && (
+            <div className="absolute right-0 top-full mt-1.5 z-20 min-w-[180px] rounded-xl bg-white py-1.5 shadow-lg ring-1 ring-slate-200">
+              {DATE_PRESETS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => handlePreset(p.key)}
+                  className={`w-full px-4 py-2 text-left text-sm transition hover:bg-slate-50 ${datePreset === p.key ? 'font-semibold text-blue-600' : 'text-slate-700'}`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+        {/* Custom date inputs — shown only when Custom range is selected */}
+        {datePreset === 'custom' && (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            />
+            <span className="text-slate-400 text-sm">—</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            />
+          </div>
+        )}
         <button
           type="button"
           onClick={exportCustomers}
@@ -346,9 +444,9 @@ export default function Dashboard({ summary, loading: appLoading }) {
           </div>
 
           {chartLoading ? (
-            <div className="flex h-[260px] items-center justify-center text-sm text-slate-400">Loading…</div>
+            <div className="flex h-[340px] items-center justify-center text-sm text-slate-400">Loading…</div>
           ) : (
-            <svg viewBox={`0 0 ${barData.width} ${barData.height}`} className="w-full h-[260px]">
+            <svg viewBox={`0 0 ${barData.width} ${barData.height}`} className="w-full h-[340px]">
               {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
                 const y = barData.paddingTop + (1 - tick) * barData.plotHeight;
                 const val = tick * barData.maxValue;
