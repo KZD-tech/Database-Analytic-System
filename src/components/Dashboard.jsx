@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Download, Search, Users, Banknote, TrendingUp, Receipt, PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Download, Search, Users, Banknote, TrendingUp, Receipt, PlusCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react';
 import { getCustomers, getDonationChart } from '../services/api';
 import { DonorGrowthChart, NewVsReturningChart, SourceDonutChart, YoyChart } from './Charts';
 
@@ -169,6 +169,8 @@ export default function Dashboard({ summary, loading: appLoading }) {
 
   const [customersData, setCustomersData] = useState({ customers: [], total: 0, page: 1, per_page: PER_PAGE, total_pages: 0 });
   const [tableLoading, setTableLoading] = useState(false);
+  const [sortCol, setSortCol] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
 
   const [chartSeries, setChartSeries] = useState([]);
   const [chartLoading, setChartLoading] = useState(false);
@@ -246,7 +248,54 @@ export default function Dashboard({ summary, loading: appLoading }) {
     URL.revokeObjectURL(url);
   };
 
-  const { customers, total, total_pages } = customersData;
+  const sortKeys = {
+    transactions: 'total_orders',
+    total:        'total_spent',
+    first:        'first_purchase_date',
+    latest:       'last_purchase_date',
+    average:      'aov',
+    highvalue:    'highvalue',
+    status:       'status',
+  };
+
+  const handleSort = (col) => {
+    if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortCol(col); setSortDir('asc'); }
+  };
+
+  const sortedCustomers = sortCol
+    ? [...(customersData.customers || [])].sort((a, b) => {
+        const key = sortKeys[sortCol] || sortCol;
+        let va = a[key]; let vb = b[key];
+        if (va == null) va = ''; if (vb == null) vb = '';
+        const cmp = typeof va === 'number'
+          ? va - vb
+          : String(va).localeCompare(String(vb));
+        return sortDir === 'asc' ? cmp : -cmp;
+      })
+    : (customersData.customers || []);
+
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <ChevronUp className="h-3 w-3 opacity-25" />;
+    return sortDir === 'asc'
+      ? <ChevronUp className="h-3 w-3 text-blue-500" />
+      : <ChevronDown className="h-3 w-3 text-blue-500" />;
+  };
+
+  const SortTh = ({ col, children }) => (
+    <th
+      className="px-5 py-3.5 font-semibold cursor-pointer select-none hover:bg-slate-100 transition"
+      onClick={() => handleSort(col)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        <SortIcon col={col} />
+      </span>
+    </th>
+  );
+
+  const { total, total_pages } = customersData;
+  const customers = sortedCustomers;
   const currentPage = customersData.page || 1;
   const startIdx = (currentPage - 1) * PER_PAGE + 1;
   const endIdx = Math.min(currentPage * PER_PAGE, total);
@@ -478,13 +527,13 @@ export default function Dashboard({ summary, loading: appLoading }) {
               <tr>
                 <th className="px-5 py-3.5 font-semibold">Donor</th>
                 <th className="px-5 py-3.5 font-semibold">Phone</th>
-                <th className="px-5 py-3.5 font-semibold">Transactions</th>
-                <th className="px-5 py-3.5 font-semibold">Total</th>
-                <th className="px-5 py-3.5 font-semibold">First Donation</th>
-                <th className="px-5 py-3.5 font-semibold">Latest Donation</th>
-                <th className="px-5 py-3.5 font-semibold">Average</th>
-                <th className="px-5 py-3.5 font-semibold">High Value</th>
-                <th className="px-5 py-3.5 font-semibold">Status</th>
+                <SortTh col="transactions">Transactions</SortTh>
+                <SortTh col="total">Total</SortTh>
+                <SortTh col="first">First Donation</SortTh>
+                <SortTh col="latest">Latest Donation</SortTh>
+                <SortTh col="average">Average</SortTh>
+                <SortTh col="highvalue">High Value</SortTh>
+                <SortTh col="status">Status</SortTh>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
