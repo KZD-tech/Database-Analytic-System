@@ -67,7 +67,7 @@ function SidebarContent({ location, isAdmin, isManagerOrAbove, adminToken, curre
           <p className="px-3 mb-2 text-[10px] font-bold tracking-[0.18em] uppercase text-slate-400">Management</p>
           <div className="space-y-0.5">
             <NavItem to="/order-input" icon={PlusCircle} label="Add Donation" active={location.pathname === '/order-input'} onClick={onNavClick} />
-            <NavItem to="/staff" icon={Database} label="Staff" active={location.pathname === '/staff'} onClick={onNavClick} />
+            {isAdmin && <NavItem to="/staff" icon={Database} label="Staff" active={location.pathname === '/staff'} onClick={onNavClick} />}
             <NavItem to="/duplicates" icon={GitMerge} label="Duplicates" active={location.pathname === '/duplicates'} onClick={onNavClick} />
           </div>
         </div>
@@ -273,7 +273,7 @@ function App() {
             <Route path="/analytics" element={<PrivateRoute><Analytics /></PrivateRoute>} />
             <Route path="/customer/:id" element={<PrivateRoute><CustomerDetail /></PrivateRoute>} />
             <Route path="/order-input" element={<PrivateRoute><OrderInput onOrderCreated={onOrderCreated} /></PrivateRoute>} />
-            <Route path="/staff" element={<PrivateRoute><StaffPanel /></PrivateRoute>} />
+            <Route path="/staff" element={<PrivateRoute minRole="admin"><StaffPanel /></PrivateRoute>} />
             <Route path="/users" element={<PrivateRoute minRole="admin"><UserManagement /></PrivateRoute>} />
             <Route path="/webhooks" element={<PrivateRoute minRole="manager"><WebhooksPanel /></PrivateRoute>} />
             <Route path="*" element={<Navigate to={adminToken ? '/' : '/login'} replace />} />
