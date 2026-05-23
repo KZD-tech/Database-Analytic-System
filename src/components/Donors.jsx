@@ -160,29 +160,44 @@ export default function Donors() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Donors</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Senarai semua donor dengan filter pelbagai.</p>
+          <p className="text-sm text-slate-500 mt-0.5">Full donor list with advanced filters.</p>
         </div>
-        <button
-          onClick={exportCsv}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
-        >
-          <Download className="h-4 w-4" />
-          Export CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={fromDate}
+            onChange={e => setFromDate(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+          />
+          <span className="text-slate-400">—</span>
+          <input
+            type="date"
+            value={toDate}
+            onChange={e => setToDate(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+          />
+          <button
+            onClick={exportCsv}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Filter bar */}
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4">
 
           {/* Search */}
-          <div className="relative xl:col-span-2">
+          <div className="relative lg:col-span-2">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Cari nama, emel, phone…"
+              placeholder="Search name, email, phone…"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
             />
           </div>
@@ -214,22 +229,6 @@ export default function Donors() {
             {HIGHVALUE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
 
-          {/* Date range */}
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={fromDate}
-              onChange={e => setFromDate(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-            />
-            <span className="text-slate-400 shrink-0">—</span>
-            <input
-              type="date"
-              value={toDate}
-              onChange={e => setToDate(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-            />
-          </div>
         </div>
 
         {/* Active filter chips */}
@@ -279,7 +278,7 @@ export default function Donors() {
               {loading ? (
                 <tr><td colSpan={10} className="px-5 py-12 text-center text-slate-400">Loading…</td></tr>
               ) : customers.length === 0 ? (
-                <tr><td colSpan={10} className="px-5 py-12 text-center text-slate-400">Tiada donor dijumpai. Cuba tukar filter.</td></tr>
+                <tr><td colSpan={10} className="px-5 py-12 text-center text-slate-400">No donors found. Try adjusting your filters.</td></tr>
               ) : customers.map(c => (
                 <tr
                   key={c.id}
