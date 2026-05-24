@@ -80,6 +80,12 @@ export default function MarketingCosts() {
   const [reportCosts, setReportCosts] = useState([]);
   const [reportLoading, setReportLoading] = useState(false);
 
+  // Date range filter
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo]     = useState('');
+  const [activeFrom, setActiveFrom] = useState('');
+  const [activeTo, setActiveTo]     = useState('');
+
   // Table
   const [deleteId, setDeleteId] = useState(null);
   const [page, setPage] = useState(1);
@@ -87,18 +93,24 @@ export default function MarketingCosts() {
 
   const fetchCosts = useCallback(async () => {
     setLoading(true);
-    const data = await getMarketingCosts({ page, per_page: PER_PAGE });
+    const params = { page, per_page: PER_PAGE };
+    if (activeFrom) params.from_date = activeFrom;
+    if (activeTo)   params.to_date   = activeTo;
+    const data = await getMarketingCosts(params);
     setCosts(data.costs || []);
     setTotal(data.total || 0);
     setLoading(false);
-  }, [page]);
+  }, [page, activeFrom, activeTo]);
 
   const fetchRoi = useCallback(async () => {
     setRoiLoading(true);
-    const data = await getMarketingRoi();
+    const params = {};
+    if (activeFrom) params.from_date = activeFrom;
+    if (activeTo)   params.to_date   = activeTo;
+    const data = await getMarketingRoi(params);
     setRoi(data || []);
     setRoiLoading(false);
-  }, []);
+  }, [activeFrom, activeTo]);
 
   useEffect(() => { fetchCosts(); }, [fetchCosts]);
   useEffect(() => { fetchRoi(); }, [fetchRoi]);
@@ -318,6 +330,39 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
             <Plus className="h-4 w-4" />Add Cost
           </button>
         </div>
+      </div>
+
+      {/* Date range filter */}
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1.5">From Date</label>
+          <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1.5">To Date</label>
+          <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
+        </div>
+        <div className="flex gap-2">
+          <button type="button"
+            onClick={() => { setPage(1); setActiveFrom(filterFrom); setActiveTo(filterTo); }}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition">
+            Apply
+          </button>
+          {(activeFrom || activeTo) && (
+            <button type="button"
+              onClick={() => { setFilterFrom(''); setFilterTo(''); setActiveFrom(''); setActiveTo(''); setPage(1); }}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
+              Clear
+            </button>
+          )}
+        </div>
+        {(activeFrom || activeTo) && (
+          <p className="text-xs text-blue-600 font-medium ml-1 self-end pb-2">
+            Showing: {activeFrom || '—'} → {activeTo || '—'}
+          </p>
+        )}
       </div>
 
       {/* Monthly report panel */}
