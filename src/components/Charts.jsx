@@ -8,107 +8,80 @@ const fmtMonth = (s) => {
   return new Date(Number(y), Number(m) - 1).toLocaleString('en-MY', { month: 'short', year: '2-digit' });
 };
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const SOURCE_COLORS = ['#6366f1','#10b981','#f59e0b','#0ea5e9','#f43f5e','#8b5cf6','#f97316','#84cc16','#ec4899','#06b6d4'];
+const CARD = 'rounded-xl bg-white border border-slate-200 p-5';
+const LABEL = 'text-xs font-semibold text-slate-400 uppercase tracking-widest';
+const TITLE = 'mt-0.5 text-sm font-semibold text-slate-800';
 
-const SOURCE_COLORS = [
-  '#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316','#84cc16','#ec4899','#6366f1',
-];
-
-// ── Donor Growth Line Chart ────────────────────────────────────────────────────
 export function DonorGrowthChart() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [months, setMonths] = useState(12);
 
-  const load = async (m) => {
+  useEffect(() => {
     setLoading(true);
-    const rows = await getDonorGrowthChart({ months: m });
-    setData(rows);
-    setLoading(false);
-  };
+    getDonorGrowthChart({ months }).then(rows => { setData(rows); setLoading(false); });
+  }, [months]);
 
-  useEffect(() => { load(months); }, [months]);
-
-  const W = 560, H = 220, PL = 56, PR = 16, PT = 16, PB = 36;
+  const W = 900, H = 300, PL = 56, PR = 16, PT = 16, PB = 36;
   const chartW = W - PL - PR;
   const chartH = H - PT - PB;
-
   const maxNew = data.length ? Math.max(...data.map(d => d.new_donors), 1) : 1;
   const maxCum = data.length ? Math.max(...data.map(d => d.cumulative), 1) : 1;
   const barW = data.length ? Math.max(6, chartW / data.length - 4) : 20;
-
   const xPos = (i) => PL + (i + 0.5) * (chartW / (data.length || 1));
-
   const newYScale = (v) => PT + chartH - (v / maxNew) * chartH;
   const cumYScale = (v) => PT + chartH - (v / maxCum) * chartH;
-
   const linePath = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${xPos(i)},${cumYScale(d.cumulative)}`).join(' ');
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
-            <TrendingUp className="h-5 w-5 text-blue-500" />
-          </div>
-          <div>
-            <p className="font-bold text-slate-900 text-sm">Donor Growth</p>
-            <p className="text-xs text-slate-400">New donors per month + cumulative total</p>
-          </div>
+    <div className={CARD}>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <p className={LABEL}>Donor Growth</p>
+          <p className={TITLE}>New donors per month + cumulative total</p>
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
           {[6, 12, 24].map(m => (
             <button key={m} type="button" onClick={() => setMonths(m)}
-              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${months === m ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${months === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
               {m}M
             </button>
           ))}
         </div>
       </div>
-
       {loading ? (
         <div className="flex items-center justify-center h-56 text-slate-400 text-sm">Loading…</div>
       ) : data.length === 0 ? (
         <div className="flex items-center justify-center h-56 text-slate-400 text-sm">No data available</div>
       ) : (
         <>
-          <div className="flex items-center gap-4 mb-3 text-xs text-slate-500">
-            <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-blue-400" />New donors</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-emerald-500" />Cumulative</span>
+          <div className="flex items-center gap-4 mb-3 text-xs text-slate-400">
+            <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{background:'#a5b4fc'}} />New donors</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-4" style={{background:'#6366f1'}} />Cumulative</span>
           </div>
           <div className="overflow-x-auto">
             <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: Math.max(280, data.length * 36) }}>
-              {/* Y gridlines */}
-              {[0, 0.25, 0.5, 0.75, 1].map(t => (
+              <defs>
+                <linearGradient id="growthGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity="0.1" />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {[0.25, 0.5, 0.75, 1].map(t => (
                 <g key={t}>
-                  <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)}
-                    stroke="#f1f5f9" strokeWidth="1" />
-                  <text x={PL - 4} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9" fill="#94a3b8">
-                    {Math.round(maxNew * t)}
-                  </text>
+                  <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 3" />
+                  <text x={PL - 6} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9.5" fill="#94a3b8">{Math.round(maxNew * t)}</text>
                 </g>
               ))}
-              {/* Bars for new donors */}
               {data.map((d, i) => (
-                <rect key={i}
-                  x={xPos(i) - barW / 2}
-                  y={newYScale(d.new_donors)}
-                  width={barW}
-                  height={Math.max(0, PT + chartH - newYScale(d.new_donors))}
-                  rx="3" fill="#93c5fd" />
+                <rect key={i} x={xPos(i) - barW / 2} y={newYScale(d.new_donors)} width={barW}
+                  height={Math.max(0, PT + chartH - newYScale(d.new_donors))} rx="3" fill="#c7d2fe" />
               ))}
-              {/* Cumulative line */}
-              {data.length > 1 && (
-                <path d={linePath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-              )}
-              {/* Dots on cumulative */}
+              {data.length > 1 && <path d={linePath} fill="none" stroke="#6366f1" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+              {data.map((d, i) => <circle key={i} cx={xPos(i)} cy={cumYScale(d.cumulative)} r="3" fill="#fff" stroke="#6366f1" strokeWidth="2" />)}
               {data.map((d, i) => (
-                <circle key={i} cx={xPos(i)} cy={cumYScale(d.cumulative)} r="3" fill="#10b981" />
-              ))}
-              {/* X labels */}
-              {data.map((d, i) => (
-                <text key={i} x={xPos(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="#94a3b8">
-                  {fmtMonth(d.month)}
-                </text>
+                <text key={i} x={xPos(i)} y={H - 6} textAnchor="middle" fontSize="9.5" fill="#94a3b8">{fmtMonth(d.month)}</text>
               ))}
             </svg>
           </div>
@@ -118,22 +91,17 @@ export function DonorGrowthChart() {
   );
 }
 
-// ── New vs Returning Stacked Bar ──────────────────────────────────────────────
 export function NewVsReturningChart() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [months, setMonths] = useState(12);
 
-  const load = async (m) => {
+  useEffect(() => {
     setLoading(true);
-    const rows = await getNewVsReturningChart({ months: m });
-    setData(rows);
-    setLoading(false);
-  };
+    getNewVsReturningChart({ months }).then(rows => { setData(rows); setLoading(false); });
+  }, [months]);
 
-  useEffect(() => { load(months); }, [months]);
-
-  const W = 560, H = 220, PL = 40, PR = 16, PT = 16, PB = 36;
+  const W = 900, H = 300, PL = 40, PR = 16, PT = 16, PB = 36;
   const chartW = W - PL - PR;
   const chartH = H - PT - PB;
   const maxVal = data.length ? Math.max(...data.map(d => d.new + d.returning), 1) : 1;
@@ -142,57 +110,48 @@ export function NewVsReturningChart() {
   const yScale = (v) => (v / maxVal) * chartH;
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
-            <Users className="h-5 w-5 text-emerald-500" />
-          </div>
-          <div>
-            <p className="font-bold text-slate-900 text-sm">New vs Returning Donors</p>
-            <p className="text-xs text-slate-400">Monthly breakdown of donor segments</p>
-          </div>
+    <div className={CARD}>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <p className={LABEL}>New vs Returning</p>
+          <p className={TITLE}>Monthly breakdown of donor segments</p>
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
           {[6, 12, 24].map(m => (
             <button key={m} type="button" onClick={() => setMonths(m)}
-              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${months === m ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${months === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
               {m}M
             </button>
           ))}
         </div>
       </div>
-
       {loading ? (
         <div className="flex items-center justify-center h-56 text-slate-400 text-sm">Loading…</div>
       ) : data.length === 0 ? (
         <div className="flex items-center justify-center h-56 text-slate-400 text-sm">No data available</div>
       ) : (
         <>
-          <div className="flex items-center gap-4 mb-3 text-xs text-slate-500">
-            <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-blue-400" />New</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-emerald-400" />Returning</span>
+          <div className="flex items-center gap-4 mb-3 text-xs text-slate-400">
+            <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-indigo-300" />New</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-300" />Returning</span>
           </div>
           <div className="overflow-x-auto">
             <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: Math.max(280, data.length * 36) }}>
-              {[0, 0.25, 0.5, 0.75, 1].map(t => (
+              {[0.25, 0.5, 0.75, 1].map(t => (
                 <g key={t}>
-                  <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" />
-                  <text x={PL - 4} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9" fill="#94a3b8">
-                    {Math.round(maxVal * t)}
-                  </text>
+                  <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 3" />
+                  <text x={PL - 6} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9.5" fill="#94a3b8">{Math.round(maxVal * t)}</text>
                 </g>
               ))}
               {data.map((d, i) => {
-                const returningH = yScale(d.returning);
-                const newH = yScale(d.new);
-                const total = returningH + newH;
+                const rH = yScale(d.returning);
+                const nH = yScale(d.new);
                 const baseY = PT + chartH;
                 return (
                   <g key={i}>
-                    <rect x={xPos(i) - barW / 2} y={baseY - returningH} width={barW} height={returningH} rx="0" fill="#6ee7b7" />
-                    <rect x={xPos(i) - barW / 2} y={baseY - total} width={barW} height={newH} rx="3" fill="#93c5fd" />
-                    <text x={xPos(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="#94a3b8">{fmtMonth(d.month)}</text>
+                    <rect x={xPos(i) - barW / 2} y={baseY - rH} width={barW} height={rH} fill="#6ee7b7" opacity="0.8" />
+                    <rect x={xPos(i) - barW / 2} y={baseY - rH - nH} width={barW} height={nH} rx="2" fill="#a5b4fc" opacity="0.9" />
+                    <text x={xPos(i)} y={H - 6} textAnchor="middle" fontSize="9.5" fill="#94a3b8">{fmtMonth(d.month)}</text>
                   </g>
                 );
               })}
@@ -204,7 +163,6 @@ export function NewVsReturningChart() {
   );
 }
 
-// ── Source Breakdown Donut ────────────────────────────────────────────────────
 export function SourceDonutChart() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -215,41 +173,29 @@ export function SourceDonutChart() {
 
   const total = data.reduce((s, d) => s + d.total, 0);
   const R = 72, CX = 100, CY = 100, inner = 44;
-
   const slices = [];
   let angle = -Math.PI / 2;
   data.forEach((d, i) => {
     const frac = total > 0 ? d.total / total : 0;
     const sweep = frac * 2 * Math.PI;
-    const x1 = CX + R * Math.cos(angle);
-    const y1 = CY + R * Math.sin(angle);
-    const x2 = CX + R * Math.cos(angle + sweep);
-    const y2 = CY + R * Math.sin(angle + sweep);
-    const xi1 = CX + inner * Math.cos(angle);
-    const yi1 = CY + inner * Math.sin(angle);
-    const xi2 = CX + inner * Math.cos(angle + sweep);
-    const yi2 = CY + inner * Math.sin(angle + sweep);
+    const x1 = CX + R * Math.cos(angle), y1 = CY + R * Math.sin(angle);
+    const x2 = CX + R * Math.cos(angle + sweep), y2 = CY + R * Math.sin(angle + sweep);
+    const xi1 = CX + inner * Math.cos(angle), yi1 = CY + inner * Math.sin(angle);
+    const xi2 = CX + inner * Math.cos(angle + sweep), yi2 = CY + inner * Math.sin(angle + sweep);
     const large = sweep > Math.PI ? 1 : 0;
     slices.push({
       d: `M${xi1},${yi1} A${inner},${inner} 0 ${large} 1 ${xi2},${yi2} L${x2},${y2} A${R},${R} 0 ${large} 0 ${x1},${y1} Z`,
-      color: SOURCE_COLORS[i % SOURCE_COLORS.length],
-      frac, label: d.source, total: d.total,
+      color: SOURCE_COLORS[i % SOURCE_COLORS.length], frac, label: d.source, total: d.total,
     });
     angle += sweep;
   });
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50">
-          <PieChart className="h-5 w-5 text-violet-500" />
-        </div>
-        <div>
-          <p className="font-bold text-slate-900 text-sm">Source Breakdown</p>
-          <p className="text-xs text-slate-400">Donation amount by acquisition source</p>
-        </div>
+    <div className={CARD}>
+      <div className="mb-4">
+        <p className={LABEL}>Source Breakdown</p>
+        <p className={TITLE}>Donation amount by acquisition source</p>
       </div>
-
       {loading ? (
         <div className="flex items-center justify-center h-48 text-slate-400 text-sm">Loading…</div>
       ) : data.length === 0 ? (
@@ -257,9 +203,7 @@ export function SourceDonutChart() {
       ) : (
         <div className="flex flex-col sm:flex-row items-center gap-6">
           <svg viewBox="0 0 200 200" className="w-44 shrink-0">
-            {slices.map((s, i) => (
-              <path key={i} d={s.d} fill={s.color} />
-            ))}
+            {slices.map((s, i) => <path key={i} d={s.d} fill={s.color} />)}
             <circle cx={CX} cy={CY} r={inner - 2} fill="white" />
             <text x={CX} y={CY - 6} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="600">Total</text>
             <text x={CX} y={CY + 10} textAnchor="middle" fontSize="9" fill="#94a3b8">{fmtRM(total)}</text>
@@ -284,103 +228,125 @@ export function SourceDonutChart() {
   );
 }
 
-// ── Year-over-Year Comparison ─────────────────────────────────────────────────
+const YEAR_COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316','#ec4899'];
+
 export function YoyChart() {
-  const [result, setResult] = useState({ data: [], current_year: new Date().getFullYear(), previous_year: new Date().getFullYear() - 1 });
+  const [result, setResult] = useState({ years: [], data: [] });
   const [loading, setLoading] = useState(true);
+  const [hidden, setHidden] = useState(new Set());
 
   useEffect(() => {
     getYoyComparison().then(r => { setResult(r); setLoading(false); });
   }, []);
 
-  const { data, current_year, previous_year } = result;
-  const W = 560, H = 220, PL = 60, PR = 16, PT = 16, PB = 36;
+  const { years, data } = result;
+  const visibleYears = years.filter(y => !hidden.has(y));
+
+  const toggleYear = (y) => setHidden(prev => {
+    const next = new Set(prev);
+    next.has(y) ? next.delete(y) : next.add(y);
+    return next;
+  });
+
+  const W = 620, H = 240, PL = 64, PR = 16, PT = 16, PB = 36;
   const chartW = W - PL - PR;
   const chartH = H - PT - PB;
-  const maxVal = data.length ? Math.max(...data.map(d => Math.max(d.current, d.previous)), 1) : 1;
-  const groupW = chartW / (data.length || 1);
-  const barW = Math.max(5, groupW * 0.35);
+  const fmtK = (v) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v));
 
-  const xCur = (i) => PL + i * groupW + groupW * 0.2;
-  const xPrev = (i) => PL + i * groupW + groupW * 0.2 + barW + 3;
-  const yScale = (v) => PT + chartH - (v / maxVal) * chartH;
+  const maxVal = data.length && visibleYears.length
+    ? Math.max(...data.map(d => Math.max(...visibleYears.map(y => d[y] || 0))), 1)
+    : 1;
+
+  const groupW = chartW / 12;
+  const gap = 2;
+  const barW = visibleYears.length > 0 ? Math.max(4, (groupW - gap * (visibleYears.length + 1)) / visibleYears.length) : groupW * 0.6;
+  const totalBarBlock = visibleYears.length * barW + (visibleYears.length - 1) * gap;
+  const groupX = (i) => PL + i * groupW + groupW / 2 - totalBarBlock / 2;
+  const barX = (monthIdx, yearIdx) => groupX(monthIdx) + yearIdx * (barW + gap);
   const barH = (v) => Math.max(0, (v / maxVal) * chartH);
-
-  const yTicks = [0, 0.25, 0.5, 0.75, 1];
-
-  const fmtK = (v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v));
+  const barY = (v) => PT + chartH - barH(v);
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50">
-            <BarChart2 className="h-5 w-5 text-amber-500" />
-          </div>
-          <div>
-            <p className="font-bold text-slate-900 text-sm">Year-over-Year Comparison</p>
-            <p className="text-xs text-slate-400">Monthly donations: {current_year} vs {previous_year}</p>
-          </div>
+    <div className={CARD}>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <p className={LABEL}>Year-over-Year</p>
+          <p className={TITLE}>Monthly donation totals — all years in data</p>
         </div>
+        {years.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {years.map((y, i) => {
+              const color = YEAR_COLORS[i % YEAR_COLORS.length];
+              const isHidden = hidden.has(y);
+              return (
+                <button key={y} type="button" onClick={() => toggleYear(y)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${isHidden ? 'border-slate-200 bg-white text-slate-400' : 'border-transparent text-white'}`}
+                  style={isHidden ? {} : { backgroundColor: color }}>
+                  <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: isHidden ? '#cbd5e1' : '#fff' }} />
+                  {y}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center h-56 text-slate-400 text-sm">Loading…</div>
+      ) : data.length === 0 || years.length === 0 ? (
+        <div className="flex items-center justify-center h-56 text-slate-400 text-sm">No data available</div>
       ) : (
-        <>
-          <div className="flex items-center gap-4 mb-3 text-xs text-slate-500">
-            <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-blue-400" />{current_year}</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-slate-300" />{previous_year}</span>
-          </div>
-          <div className="overflow-x-auto">
-            <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 360 }}>
-              {yTicks.map(t => (
-                <g key={t}>
-                  <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" />
-                  <text x={PL - 4} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9" fill="#94a3b8">
-                    {fmtK(maxVal * t)}
-                  </text>
-                </g>
-              ))}
-              {data.map((d, i) => (
-                <g key={i}>
-                  <rect x={xCur(i)} y={yScale(d.current)} width={barW} height={barH(d.current)} rx="3" fill="#93c5fd" />
-                  <rect x={xPrev(i)} y={yScale(d.previous)} width={barW} height={barH(d.previous)} rx="3" fill="#cbd5e1" />
-                  <text x={PL + i * groupW + groupW / 2} y={H - 6} textAnchor="middle" fontSize="9" fill="#94a3b8">
-                    {MONTH_LABELS[i]}
-                  </text>
-                </g>
-              ))}
-            </svg>
-          </div>
-        </>
+        <div className="overflow-x-auto">
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 420 }}>
+            {/* Grid lines */}
+            {[0.25, 0.5, 0.75, 1].map(t => (
+              <g key={t}>
+                <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 3" />
+                <text x={PL - 6} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9.5" fill="#94a3b8">{fmtK(maxVal * t)}</text>
+              </g>
+            ))}
+            {/* Bars */}
+            {data.map((d, mi) =>
+              visibleYears.map((year, yi) => {
+                const color = YEAR_COLORS[years.indexOf(year) % YEAR_COLORS.length];
+                const v = d[year] || 0;
+                const h = barH(v);
+                return h > 0 ? (
+                  <rect key={`${mi}-${year}`}
+                    x={barX(mi, yi)} y={barY(v)}
+                    width={barW} height={h}
+                    rx="2" fill={color} fillOpacity="0.85"
+                  />
+                ) : null;
+              })
+            )}
+            {/* Month labels */}
+            {MONTH_LABELS.map((lbl, i) => (
+              <text key={i} x={PL + i * groupW + groupW / 2} y={H - 8} textAnchor="middle" fontSize="9" fill="#94a3b8">{lbl}</text>
+            ))}
+          </svg>
+        </div>
       )}
     </div>
   );
 }
 
-// ── Main Charts Page ──────────────────────────────────────────────────────────
 export default function Charts() {
-  const [refreshKey, setRefreshKey] = useState(0);
-
+  const [key, setKey] = useState(0);
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <div className="flex items-center justify-between rounded-xl bg-white border border-slate-200 p-5">
         <div>
           <p className="font-bold text-slate-900">Advanced Charts</p>
           <p className="text-sm text-slate-400">Visual analytics across donor behaviour and donation trends</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setRefreshKey(k => k + 1)}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-        >
+        <button type="button" onClick={() => setKey(k => k + 1)}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
           <RefreshCw className="h-4 w-4" />
           Refresh all
         </button>
       </div>
-
-      <div key={refreshKey} className="grid gap-6 xl:grid-cols-2">
+      <div key={key} className="space-y-6">
         <DonorGrowthChart />
         <NewVsReturningChart />
         <SourceDonutChart />

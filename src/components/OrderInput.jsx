@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowRight, CalendarDays, DollarSign, Mail, Phone, ShoppingBag, User } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { ArrowRight, CalendarDays, DollarSign, Mail, Phone, ShoppingBag, User, Upload } from 'lucide-react';
 import { createOrder, bulkUploadOrders } from '../services/api';
 
 const initialForm = {
@@ -17,22 +17,25 @@ export default function OrderInput({ onOrderCreated }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploadError, setUploadError] = useState('');
-  const [uploadSuccess, setUploadSuccess] = useState('');
+  const [uploadResult, setUploadResult] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
+  const fileInputRef = useRef(null);
 
-  const csvHeaders = ['full_name', 'phone', 'email', 'order_date', 'amount', 'source', 'campaign'];
+  const csvHeaders = ['name', 'phone', 'email', 'donation_date', 'amount', 'source', 'campaign'];
 
   const formatCsvValue = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
   const downloadTemplate = () => {
     const exampleRow = [
-      'Siti Nurhaliza',
+      'John Smith',
       '0123456789',
-      'siti@example.com',
+      'john@example.com',
       '2026-05-16',
       '120.00',
       'facebook',
-      'Kempen Ramadhan'
+      'Ramadan Campaign'
     ];
     const csv = [csvHeaders.join(','), exampleRow.map(formatCsvValue).join(',')].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -89,18 +92,18 @@ export default function OrderInput({ onOrderCreated }) {
   const parseCsv = (text) => {
     const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     if (lines.length < 2) {
-      throw new Error('CSV mesti mempunyai baris tajuk dan sekurang-kurangnya satu baris rekod.');
+      throw new Error('CSV must have a header row and at least one data row.');
     }
 
     const header = parseCsvLine(lines[0]).map((value) => value.trim().toLowerCase());
     if (header.length !== csvHeaders.length || csvHeaders.some((column, index) => header[index] !== column)) {
-      throw new Error(`Tajuk CSV mesti: ${csvHeaders.join(', ')}.`);
+      throw new Error(`CSV headers must be: ${csvHeaders.join(', ')}.`);
     }
 
     return lines.slice(1).map((line, index) => {
       const row = parseCsvLine(line);
       if (row.length !== csvHeaders.length) {
-        throw new Error(`Baris ${index + 2} tidak mempunyai ${csvHeaders.length} lajur.`);
+        throw new Error(`Row ${index + 2} does not have ${csvHeaders.length} columns.`);
       }
       return csvHeaders.reduce((acc, column, columnIndex) => {
         acc[column] = row[columnIndex]?.trim() ?? '';
@@ -109,32 +112,47 @@ export default function OrderInput({ onOrderCreated }) {
     });
   };
 
-  const handleCsvFile = async (event) => {
-    const file = event.target.files?.[0];
+  const handleFileSelect = (file) => {
     if (!file) return;
-
     setUploadError('');
-    setUploadSuccess('');
-    setUploading(true);
+    setUploadResult(null);
+    setPendingFile(file);
+  };
 
+  const handleCsvFile = (event) => handleFileSelect(event.target.files?.[0]);
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    setDragging(false);
+    handleFileSelect(event.dataTransfer.files?.[0]);
+  };
+
+  const handleUpload = async () => {
+    if (!pendingFile) return;
+    setUploadError('');
+    setUploadResult(null);
+    setUploading(true);
     try {
       const text = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error('Gagal membaca fail CSV.'));
-        reader.readAsText(file, 'utf-8');
+        reader.onerror = () => reject(new Error('Gagal baca fail CSV.'));
+        reader.readAsText(pendingFile, 'utf-8');
       });
-
       const rows = parseCsv(String(text));
       const result = await bulkUploadOrders(String(text));
-      setUploadSuccess(`Berjaya memuat naik ${result.imported || rows.length} baris.`);
-      setForm(initialForm);
+      setUploadResult({
+        rows: result.imported ?? rows.length,
+        newDonors: result.new_donors ?? 0,
+        transactions: result.imported ?? rows.length,
+      });
+      setPendingFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       onOrderCreated();
     } catch (err) {
-      setUploadError(err.message || 'Gagal memuat naik CSV. Sila cuba lagi.');
+      setUploadError(err.message || 'Gagal upload CSV. Sila cuba lagi.');
     } finally {
       setUploading(false);
-      event.target.value = '';
     }
   };
 
@@ -147,7 +165,7 @@ export default function OrderInput({ onOrderCreated }) {
     event.preventDefault();
     setError('');
     if (!form.order_date || !form.amount) {
-      return setError('Tarikh dan jumlah adalah wajib.');
+      return setError('Date and amount are required.');
     }
     setSaving(true);
     try {
@@ -165,7 +183,7 @@ export default function OrderInput({ onOrderCreated }) {
       setForm(initialForm);
       onOrderCreated();
     } catch (err) {
-      setError('Tidak dapat menghantar pesanan. Sila cuba lagi.');
+      setError('Unable to submit donation. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -175,13 +193,13 @@ export default function OrderInput({ onOrderCreated }) {
     <div className="mx-auto max-w-3xl space-y-6 rounded-2xl bg-white p-8 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Tambah pesanan</p>
-          <h1 className="mt-3 text-3xl font-semibold text-slate-950">Rekodkan pesanan baru</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Hantar pesanan manual dan padankan pelanggan secara automatik jika ada.</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Add donation</p>
+          <h1 className="mt-3 text-3xl font-semibold text-slate-950">Record a new donation</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Submit a manual donation and automatically match the donor if they already exist.</p>
         </div>
         <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
           <ShoppingBag className="h-4 w-4" />
-          Borang pesanan
+          Donation form
         </div>
       </div>
 
@@ -194,7 +212,7 @@ export default function OrderInput({ onOrderCreated }) {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-semibold text-slate-700">Tarikh pesanan</label>
+            <label className="block text-sm font-semibold text-slate-700">Donation date</label>
             <div className="relative mt-2">
               <CalendarDays className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -207,7 +225,7 @@ export default function OrderInput({ onOrderCreated }) {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-700">Jumlah</label>
+            <label className="block text-sm font-semibold text-slate-700">Amount</label>
             <div className="relative mt-2">
               <DollarSign className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -221,7 +239,7 @@ export default function OrderInput({ onOrderCreated }) {
             </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <label className="block text-sm font-semibold text-slate-700">Sumber pesanan</label>
+            <label className="block text-sm font-semibold text-slate-700">Donation source</label>
             <select
               name="source"
               value={form.source}
@@ -234,7 +252,7 @@ export default function OrderInput({ onOrderCreated }) {
               <option value="instagram">Instagram</option>
               <option value="tiktok">TikTok</option>
               <option value="website">Website</option>
-              <option value="other">Lain-lain</option>
+              <option value="other">Other</option>
             </select>
           </div>
         </div>
@@ -245,14 +263,14 @@ export default function OrderInput({ onOrderCreated }) {
               <User className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-900">Maklumat pelanggan</p>
-              <p className="text-sm text-slate-500">Isikan butiran pelanggan untuk padanan.</p>
+              <p className="text-sm font-semibold text-slate-900">Donor information</p>
+              <p className="text-sm text-slate-500">Fill in donor details for matching.</p>
             </div>
           </div>
 
           <div className="mt-6 grid gap-5 md:grid-cols-2">
             <div>
-              <label className="block text-sm font-semibold text-slate-700">Nama penuh</label>
+              <label className="block text-sm font-semibold text-slate-700">Full name</label>
               <input
                 name="full_name"
                 value={form.full_name}
@@ -261,7 +279,7 @@ export default function OrderInput({ onOrderCreated }) {
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-700">Telefon</label>
+              <label className="block text-sm font-semibold text-slate-700">Phone</label>
               <div className="relative mt-2">
                 <Phone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
@@ -273,7 +291,7 @@ export default function OrderInput({ onOrderCreated }) {
               </div>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-semibold text-slate-700">Emel</label>
+              <label className="block text-sm font-semibold text-slate-700">Email</label>
               <div className="relative mt-2">
                 <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
@@ -286,12 +304,12 @@ export default function OrderInput({ onOrderCreated }) {
               </div>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-semibold text-slate-700">Kempen</label>
+              <label className="block text-sm font-semibold text-slate-700">Campaign</label>
               <input
                 name="campaign"
                 value={form.campaign}
                 onChange={handleChange}
-                placeholder="Nama kempen atau sumber promosi"
+                placeholder="Campaign name or promotion source"
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
               />
             </div>
@@ -305,61 +323,87 @@ export default function OrderInput({ onOrderCreated }) {
             className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
           >
             <ArrowRight className="h-4 w-4" />
-            {saving ? 'Menyimpan…' : 'Simpan pesanan'}
+            {saving ? 'Saving…' : 'Save donation'}
           </button>
         </div>
       </form>
 
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Muat naik CSV berkumpulan</p>
-            <h2 className="mt-3 text-2xl font-semibold text-slate-950">Import pesanan dari fail CSV</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Muat naik fail CSV mengikut templat untuk memasukkan banyak pesanan sekaligus.</p>
-          </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span>📁</span> CSV Bulk Upload
+          </h2>
           <button
             type="button"
             onClick={downloadTemplate}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+            className="text-xs font-semibold text-blue-600 hover:underline"
           >
-            Muat turun templat CSV
+            Download template
           </button>
         </div>
 
-        <div className="mt-6 space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-slate-700">Pilih fail CSV</label>
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={handleCsvFile}
-              className="mt-2 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
-            />
-          </div>
-          <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">
-            <p className="font-semibold text-slate-800">Format CSV yang disokong:</p>
-            <p className="mt-2">full_name, phone, email, order_date, amount, source, campaign</p>
-            <p className="mt-2">Tarikh mesti dalam format <span className="font-semibold">YYYY-MM-DD</span>, jumlah dalam nombor desimal.</p>
-          </div>
-
-          {uploadError && (
-            <div className="rounded-xl bg-rose-50 px-5 py-4 text-sm text-rose-700 ring-1 ring-rose-200">
-              {uploadError}
-            </div>
+        {/* Drop zone */}
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={handleDrop}
+          className={`cursor-pointer rounded-2xl border-2 border-dashed px-6 py-10 text-center transition
+            ${dragging ? 'border-blue-400 bg-blue-100' : pendingFile ? 'border-emerald-400 bg-emerald-50' : 'border-blue-200 bg-blue-50 hover:bg-blue-100'}`}
+        >
+          <div className="text-4xl mb-3">📂</div>
+          {pendingFile ? (
+            <>
+              <p className="text-sm font-bold text-emerald-700">{pendingFile.name}</p>
+              <p className="text-xs text-emerald-500 mt-1">Fail sedia untuk diupload</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-bold text-blue-700">Drag &amp; drop fail CSV</p>
+              <p className="text-xs text-slate-400 mt-1">atau klik untuk pilih fail</p>
+            </>
           )}
-
-          {uploadSuccess && (
-            <div className="rounded-xl bg-emerald-50 px-5 py-4 text-sm text-emerald-700 ring-1 ring-emerald-200">
-              {uploadSuccess}
-            </div>
-          )}
-
-          {uploading && (
-            <div className="rounded-xl bg-slate-100 px-5 py-4 text-sm text-slate-700 ring-1 ring-slate-200">
-              Memuat naik CSV… Sila tunggu.
-            </div>
-          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleCsvFile}
+            className="hidden"
+          />
         </div>
+
+        {/* Format hint */}
+        <div className="mt-4 rounded-xl bg-slate-50 p-4 text-xs text-slate-500 font-mono leading-relaxed">
+          <p className="font-semibold text-slate-700 not-italic mb-1">Format CSV:</p>
+          <p>name,phone,email,donation_date,amount,source,campaign</p>
+          <p className="text-slate-400">Ahmad,60112345678,a@gmail.com,2024-01-15,50.00,Facebook,FB-ramadan</p>
+        </div>
+
+        {/* Error */}
+        {uploadError && (
+          <div className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">
+            {uploadError}
+          </div>
+        )}
+
+        {/* Result */}
+        {uploadResult && (
+          <div className="mt-4 rounded-xl bg-emerald-50 px-5 py-4 space-y-1.5 ring-1 ring-emerald-200">
+            <p className="text-sm text-emerald-800">✅ <span className="font-semibold">{uploadResult.rows.toLocaleString('en-MY')}</span> baris berjaya diproses</p>
+            <p className="text-sm text-emerald-800">✅ <span className="font-semibold">{uploadResult.newDonors.toLocaleString('en-MY')}</span> donor baru ditambah</p>
+            <p className="text-sm text-emerald-800">✅ <span className="font-semibold">{uploadResult.transactions.toLocaleString('en-MY')}</span> transaksi direkodkan</p>
+          </div>
+        )}
+
+        {/* Upload button */}
+        <button
+          type="button"
+          onClick={handleUpload}
+          disabled={!pendingFile || uploading}
+          className="mt-5 w-full rounded-2xl bg-blue-600 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {uploading ? 'Memproses… Sila tunggu' : 'Upload & Proses CSV'}
+        </button>
       </div>
     </div>
   );

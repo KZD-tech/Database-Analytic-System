@@ -3,9 +3,9 @@ import { Copy, Check, Plus, Trash2, Webhook, Activity, X, ToggleLeft, ToggleRigh
 import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, getWebhookLogs } from '../services/api';
 
 const EVENT_OPTIONS = [
-  { value: 'order.created', label: 'Pesanan dibuat (order.created)' },
-  { value: 'customer.created', label: 'Pelanggan baharu (customer.created)' },
-  { value: '*', label: 'Semua acara (*)' }
+  { value: 'order.created', label: 'Order created (order.created)' },
+  { value: 'customer.created', label: 'New donor (customer.created)' },
+  { value: '*', label: 'All events (*)' }
 ];
 
 const BASE_URL = typeof window !== 'undefined' ? window.location.origin : '';
@@ -28,7 +28,7 @@ function CopyButton({ text }) {
       className="ml-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-200"
     >
       {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
-      {copied ? 'Disalin' : 'Salin'}
+      {copied ? 'Copied' : 'Copy'}
     </button>
   );
 }
@@ -87,7 +87,7 @@ export default function WebhooksPanel() {
   const handleCreateWebhook = async (e) => {
     e.preventDefault();
     if (!form.name || !form.url || form.events.length === 0) {
-      setFormError('Sila isi nama, URL dan pilih sekurang-kurangnya satu acara.');
+      setFormError('Please fill in name, URL and select at least one event.');
       return;
     }
     setSubmitting(true);
@@ -102,7 +102,7 @@ export default function WebhooksPanel() {
       setShowForm(false);
       await loadData();
     } catch (err) {
-      const msg = err?.response?.data?.error || 'Gagal mencipta webhook.';
+      const msg = err?.response?.data?.error || 'Failed to create webhook.';
       setFormError(msg);
     } finally {
       setSubmitting(false);
@@ -119,7 +119,7 @@ export default function WebhooksPanel() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Adakah anda pasti untuk memadam webhook ini?')) return;
+    if (!window.confirm('Are you sure you want to delete this webhook?')) return;
     try {
       await deleteWebhook(id);
       await loadData();
@@ -139,10 +139,10 @@ export default function WebhooksPanel() {
     <div className="space-y-8">
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Integrasi</p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Webhooks &amp; Integrasi</h2>
+          <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Integrations</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Webhooks &amp; Integrations</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Urus webhook masuk dan keluar untuk mengintegrasikan sistem luar dengan platform IhsanKu.
+            Manage inbound and outbound webhooks to integrate external systems with the IhsanKu platform.
           </p>
         </div>
       </section>
@@ -150,19 +150,19 @@ export default function WebhooksPanel() {
       {/* Inbound Webhooks */}
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
         <div className="mb-6">
-          <h3 className="text-xl font-semibold text-slate-950">Webhook Masuk / Integrasi</h3>
-          <p className="mt-1 text-sm text-slate-500">Gunakan URL di bawah untuk menghantar data pesanan dari platform luar ke sistem ini.</p>
+          <h3 className="text-xl font-semibold text-slate-950">Inbound Webhooks / Integrations</h3>
+          <p className="mt-1 text-sm text-slate-500">Use the URLs below to send order data from external platforms to this system.</p>
         </div>
 
         <div className="space-y-3">
           <UrlRow label="Shopify — POST" url={shopifyUrl} />
           <UrlRow label="WooCommerce — POST" url={woocommerceUrl} />
-          <UrlRow label="Generik — POST" url={genericUrl} />
-          <UrlRow label="Webhook Tersuai (rahsia dijana) — POST" url={inboundUrl} />
+          <UrlRow label="Generic — POST" url={genericUrl} />
+          <UrlRow label="Custom Webhook (generated secret) — POST" url={inboundUrl} />
         </div>
 
         <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          <strong>Petua:</strong> Untuk Shopify, konfigurasikan webhook <code className="rounded bg-slate-200 px-1">orders/create</code> dan hantarkan ke URL Shopify di atas. Untuk WooCommerce, gunakan WooCommerce &rarr; Settings &rarr; Advanced &rarr; Webhooks.
+          <strong>Tip:</strong> For Shopify, configure the <code className="rounded bg-slate-200 px-1">orders/create</code> webhook and point it to the Shopify URL above. For WooCommerce, go to WooCommerce &rarr; Settings &rarr; Advanced &rarr; Webhooks.
         </div>
       </section>
 
@@ -170,8 +170,8 @@ export default function WebhooksPanel() {
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-xl font-semibold text-slate-950">Webhook Keluar</h3>
-            <p className="mt-1 text-sm text-slate-500">Hantar notifikasi ke URL luar apabila acara berlaku dalam sistem.</p>
+            <h3 className="text-xl font-semibold text-slate-950">Outbound Webhooks</h3>
+            <p className="mt-1 text-sm text-slate-500">Send notifications to external URLs when events occur in the system.</p>
           </div>
           <button
             type="button"
@@ -179,14 +179,14 @@ export default function WebhooksPanel() {
             className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
             <Plus className="h-4 w-4" />
-            Tambah webhook
+            Add webhook
           </button>
         </div>
 
         {showForm && (
           <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-5">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="font-semibold text-slate-900">Webhook baharu</h4>
+              <h4 className="font-semibold text-slate-900">New webhook</h4>
               <button
                 type="button"
                 onClick={() => { setShowForm(false); setForm(defaultForm); setFormError(''); }}
@@ -197,19 +197,19 @@ export default function WebhooksPanel() {
             </div>
             <form onSubmit={handleCreateWebhook} className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-semibold text-slate-700" htmlFor="wh-name">Nama</label>
+                <label className="block text-sm font-semibold text-slate-700" htmlFor="wh-name">Name</label>
                 <input
                   id="wh-name"
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                   required
-                  placeholder="cth: Slack Notifikasi"
+                  placeholder="e.g. Slack Notification"
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-slate-700" htmlFor="wh-url">URL Endpoint</label>
+                <label className="block text-sm font-semibold text-slate-700" htmlFor="wh-url">Endpoint URL</label>
                 <input
                   id="wh-url"
                   type="url"
@@ -221,18 +221,18 @@ export default function WebhooksPanel() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-slate-700" htmlFor="wh-secret">Rahsia (pilihan)</label>
+                <label className="block text-sm font-semibold text-slate-700" htmlFor="wh-secret">Secret (optional)</label>
                 <input
                   id="wh-secret"
                   type="text"
                   value={form.secret}
                   onChange={(e) => setForm((p) => ({ ...p, secret: e.target.value }))}
-                  placeholder="token rahsia webhook"
+                  placeholder="webhook secret token"
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
                 />
               </div>
               <div>
-                <p className="block text-sm font-semibold text-slate-700 mb-2">Acara</p>
+                <p className="block text-sm font-semibold text-slate-700 mb-2">Events</p>
                 <div className="space-y-2">
                   {EVENT_OPTIONS.map((opt) => (
                     <label key={opt.value} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
@@ -256,14 +256,14 @@ export default function WebhooksPanel() {
                   onClick={() => { setShowForm(false); setForm(defaultForm); setFormError(''); }}
                   className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
-                  Batal
+                  Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
                   className="rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
                 >
-                  {submitting ? 'Menyimpan…' : 'Simpan webhook'}
+                  {submitting ? 'Saving…' : 'Save webhook'}
                 </button>
               </div>
             </form>
@@ -271,11 +271,11 @@ export default function WebhooksPanel() {
         )}
 
         {loading ? (
-          <p className="text-sm text-slate-500 py-4">Memuatkan webhooks…</p>
+          <p className="text-sm text-slate-500 py-4">Loading webhooks…</p>
         ) : webhooks.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-300 py-10 text-center text-slate-400">
             <Webhook className="mx-auto h-8 w-8 mb-2" />
-            <p className="text-sm">Tiada webhook dikonfigurasi.</p>
+            <p className="text-sm">No webhooks configured.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -292,11 +292,11 @@ export default function WebhooksPanel() {
                         wh.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'
                       }`}
                     >
-                      {wh.active ? 'Aktif' : 'Tidak aktif'}
+                      {wh.active ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                   <p className="mt-0.5 break-all font-mono text-xs text-slate-500">{wh.url}</p>
-                  <p className="mt-1 text-xs text-slate-400">Acara: {wh.events}</p>
+                  <p className="mt-1 text-xs text-slate-400">Events: {wh.events}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <button
@@ -308,13 +308,13 @@ export default function WebhooksPanel() {
                         : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                     }`}
                   >
-                    {wh.active ? 'Nyahaktif' : 'Aktifkan'}
+                    {wh.active ? 'Deactivate' : 'Activate'}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDelete(wh.id)}
                     className="rounded-full bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100"
-                    title="Padam webhook"
+                    title="Delete webhook"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -327,44 +327,70 @@ export default function WebhooksPanel() {
 
       {/* Recent Logs */}
       <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
-        <div className="mb-6 flex items-center gap-3">
-          <Activity className="h-5 w-5 text-slate-400" />
-          <h3 className="text-xl font-semibold text-slate-950">Log Webhook Terkini</h3>
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Activity className="h-5 w-5 text-slate-400" />
+            <div>
+              <h3 className="text-xl font-semibold text-slate-950">Webhook Activity Log</h3>
+              <p className="mt-0.5 text-sm text-slate-500">Recent inbound receives and outbound deliveries.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={loadData}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50"
+          >
+            <Activity className="h-4 w-4" />
+            Refresh
+          </button>
         </div>
 
         {recentLogs.length === 0 ? (
-          <p className="text-sm text-slate-400 py-4">Tiada log ditemui.</p>
+          <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center text-slate-400">
+            <Activity className="mx-auto h-7 w-7 mb-2 opacity-40" />
+            <p className="text-sm">No activity logged yet.</p>
+          </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200">
+          <div className="overflow-x-auto overflow-hidden rounded-xl border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm text-slate-600">
               <thead className="bg-slate-50 text-slate-700">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Webhook</th>
-                  <th className="px-4 py-3 font-semibold">Acara</th>
+                  <th className="px-4 py-3 font-semibold">Direction</th>
+                  <th className="px-4 py-3 font-semibold">Source / Destination</th>
+                  <th className="px-4 py-3 font-semibold">Event</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold">Kod</th>
-                  <th className="px-4 py-3 font-semibold">Masa</th>
+                  <th className="px-4 py-3 font-semibold">Code</th>
+                  <th className="px-4 py-3 font-semibold">Time</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {recentLogs.map((log) => {
+                  const isInbound = log.event?.startsWith('inbound.');
                   const wh = webhooks.find((w) => w.id === log.webhook_id);
+                  const sourceLabel = isInbound
+                    ? log.event.replace('inbound.', '').replace('receive', 'custom')
+                    : (wh?.name || (log.webhook_id ? `#${String(log.webhook_id).slice(0,8)}` : '—'));
                   return (
-                    <tr key={log.id}>
-                      <td className="px-4 py-3 text-slate-800">{wh?.name || `#${log.webhook_id}`}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-600">{log.event}</td>
+                    <tr key={log.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                            log.status === 'success' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                          }`}
-                        >
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                          isInbound ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {isInbound ? '↓ Inbound' : '↑ Outbound'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-800 capitalize">{sourceLabel}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-slate-500">{log.event}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          log.status === 'success' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                        }`}>
                           {log.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-500">{log.response_code ?? '—'}</td>
-                      <td className="px-4 py-3 text-xs text-slate-400">
-                        {log.created_at ? new Date(log.created_at).toLocaleString('ms-MY') : '—'}
+                      <td className="px-4 py-3 font-mono text-xs text-slate-400">{log.response_code ?? '—'}</td>
+                      <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                        {log.created_at ? new Date(log.created_at).toLocaleString('en-MY') : '—'}
                       </td>
                     </tr>
                   );

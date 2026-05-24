@@ -16,7 +16,7 @@ if (SUPABASE_URL && SUPABASE_KEY) {
   });
 
   initDb = async () => {
-    const { error } = await supabase.from('customers').select('id').limit(1);
+    const { error } = await supabase.from('donors').select('id').limit(1);
     if (error) {
       throw new Error(`Supabase connection failed: ${error.message}`);
     }
@@ -32,21 +32,16 @@ if (SUPABASE_URL && SUPABASE_KEY) {
   const adminPasswordHash = `${adminSalt}:${adminHash}`;
 
   const mockData = {
-    customers: [
+    donors: [
       {
-        id: 1,
-        full_name: 'Admin Demo',
+        id: 'mock-donor-1',
+        name: 'Admin Demo',
         phone: '0123456789',
         email: 'admin@ihsanku.local',
-        source: 'manual',
-        campaign: 'Demo',
-        created_at: now(),
-        updated_at: now(),
-        total_orders: 0,
-        total_spent: 0
+        created_at: now()
       }
     ],
-    orders: [],
+    donations: [],
     staff: [
       {
         id: 1,
@@ -71,7 +66,25 @@ if (SUPABASE_URL && SUPABASE_KEY) {
       }
     ],
     webhooks: [],
-    webhook_logs: []
+    webhook_logs: [],
+    donor_summary: [
+      {
+        id: 'mock-donor-1',
+        nama: 'Admin Demo',
+        phone: '0123456789',
+        email: 'admin@ihsanku.local',
+        source: 'manual',
+        kekerapan: 0,
+        jumlah_keseluruhan: 0,
+        ltv: 0,
+        aov: 0,
+        tarikh_sumbangan_terdahulu: null,
+        tarikh_sumbangan_terkini: null,
+        segmentasi: 'Baru',
+        highvalue: 'Tidak',
+        created_at: now()
+      }
+    ]
   };
 
   const cloneRow = (row) => JSON.parse(JSON.stringify(row));
@@ -119,9 +132,12 @@ if (SUPABASE_URL && SUPABASE_KEY) {
       // Handle insert chains: insert().select().single()
       if (state.pendingInsert !== null) {
         const insertRows = Array.isArray(state.pendingInsert) ? state.pendingInsert : [state.pendingInsert];
-        const nextId = mockData[tableName].reduce((max, row) => Math.max(max, row.id || 0), 0) + 1;
-        const inserted = insertRows.map((row, index) => {
-          const newRow = { ...row, id: nextId + index };
+        const inserted = insertRows.map((row) => {
+          // Use provided id or generate one
+          const newRow = { ...row };
+          if (newRow.id === undefined) {
+            newRow.id = `mock-${tableName}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          }
           mockData[tableName].push(newRow);
           return cloneRow(newRow);
         });
@@ -170,17 +186,13 @@ if (SUPABASE_URL && SUPABASE_KEY) {
       let rows = getRows();
       let data = rows;
 
-      if (state.selected && tableName === 'orders' && state.selected.includes('customer:customers(')) {
-        const joined = rows.map((order) => {
-          const customer = mockData.customers.find((customerRow) => customerRow.id === order.customer_id);
+      if (state.selected && tableName === 'donations' && state.selected.includes('donor:donors(')) {
+        const joined = rows.map((donation) => {
+          const donor = mockData.donors.find((d) => d.id === donation.donor_id);
           return {
-            ...order,
-            customer: customer
-              ? {
-                  full_name: customer.full_name,
-                  phone: customer.phone,
-                  email: customer.email
-                }
+            ...donation,
+            donor: donor
+              ? { name: donor.name, phone: donor.phone, email: donor.email }
               : null
           };
         });
@@ -215,7 +227,6 @@ if (SUPABASE_URL && SUPABASE_KEY) {
         return this;
       },
       ilike(field, pattern) {
-        // Convert SQL ILIKE pattern to regex: %foo% => /foo/i
         const regexStr = pattern.replace(/%/g, '.*').replace(/_/g, '.');
         const regex = new RegExp(`^${regexStr}$`, 'i');
         state.filters.push((row) => regex.test(String(row[field] || '')));
@@ -272,7 +283,6 @@ if (SUPABASE_URL && SUPABASE_KEY) {
   supabase = {
     from(tableName) {
       if (!mockData[tableName]) {
-        // Auto-create unknown tables as empty arrays
         mockData[tableName] = [];
       }
       return createQueryBuilder(tableName);

@@ -1,8 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Download, Search, TrendingUp, Users, Repeat, Clock, Zap, Activity, PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getCustomers } from '../services/api';
-import { DonorGrowthChart, NewVsReturningChart, SourceDonutChart, YoyChart } from './Charts';
+import { Download, Search, Users, Banknote, TrendingUp, Receipt, PlusCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Calendar } from 'lucide-react';
+import { getCustomers, getDonationChart } from '../services/api';
+
+const fmt = (n) => Number(n || 0).toLocaleString('en-MY');
+const fmtRM = (n) => `RM ${Number(n || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtShort = (n) => {
+  const v = Number(n || 0);
+  if (v >= 1000000) return `RM ${(v / 1000000).toFixed(2)}M`;
+  if (v >= 1000) return `RM ${(v / 1000).toFixed(1)}K`;
+  return `RM ${v.toFixed(2)}`;
+};
 
 const statusBadges = {
   active: 'bg-emerald-100 text-emerald-700',
@@ -13,118 +21,190 @@ const statusBadges = {
 };
 
 const statusLabels = {
-  all: 'Semua',
-  new: 'Baru',
-  active: 'Aktif',
-  repeat: 'Ulangan',
-  dormant: 'Tidak aktif',
-  churn: 'Berhenti'
+  all: 'All',
+  new: 'New',
+  active: 'Active',
+  repeat: 'Repeat',
+  dormant: 'Dormant',
+  churn: 'Churned'
 };
 
 const statusDescriptions = {
-  new: 'Pelanggan baru adalah mereka yang membuat pembelian kali pertama.',
-  active: 'Pelanggan aktif membuat pembelian secara konsisten.',
-  repeat: 'Pelanggan ulangan membuat pesanan lebih daripada sekali.',
-  dormant: 'Pelanggan tidak aktif belum membuat pesanan baru dalam tempoh tertentu.',
-  churn: 'Pelanggan berhenti tidak lagi membuat pembelian selepas tempoh sebelumnya.'
+  new: 'New donors are those who made their first donation.',
+  active: 'Active donors donate consistently.',
+  repeat: 'Repeat donors have donated more than once.',
+  dormant: 'Dormant donors have not made a new donation within a certain period.',
+  churn: 'Churned donors have stopped donating after a previous period.'
 };
 
-const parseDate = (value) => {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-};
+const lineChartData = (series) => {
+  const W = 720, H = 300, PL = 52, PR = 20, PT = 16, PB = 40;
+  const plotW = W - PL - PR;
+  const plotH = H - PT - PB;
+  const values = series.map((d) => d.value);
+  const maxV = Math.max(...values, 1);
+  const n = series.length;
 
-const monthlyDonationSeries = (orders, startDate, endDate) => {
-  const start = parseDate(startDate);
-  const end = parseDate(endDate);
-  const now = new Date();
-  const months = [];
-  let current;
-  let last;
+  const xPos = (i) => PL + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yPos = (v) => PT + plotH - (v / maxV) * plotH;
+  const points = series.map((d, i) => ({ ...d, x: xPos(i), y: yPos(d.value) }));
 
-  if (start && end) {
-    current = new Date(start.getFullYear(), start.getMonth(), 1);
-    last = new Date(end.getFullYear(), end.getMonth(), 1);
-    if (current > last) {
-      const swap = current;
-      current = last;
-      last = swap;
+  let linePath = '';
+  let areaPath = '';
+  if (points.length >= 2) {
+    linePath = `M ${points[0].x},${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      const p = points[i - 1], c = points[i];
+      const cpX = (p.x + c.x) / 2;
+      linePath += ` C ${cpX},${p.y} ${cpX},${c.y} ${c.x},${c.y}`;
     }
-  } else {
-    current = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-    last = new Date(now.getFullYear(), now.getMonth(), 1);
+    areaPath = `${linePath} L ${points[points.length - 1].x},${PT + plotH} L ${points[0].x},${PT + plotH} Z`;
+  } else if (points.length === 1) {
+    linePath = `M ${points[0].x},${points[0].y}`;
   }
 
-  while (current <= last) {
-    months.push({ key: current.toLocaleString('en-US', { month: 'short', year: 'numeric' }), value: 0 });
-    current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
-  }
-
-  const totals = Object.fromEntries(months.map((month) => [month.key, 0]));
-
-  orders.forEach((order) => {
-    const orderDate = parseDate(order.order_date);
-    if (!orderDate) return;
-    if (start && orderDate < start) return;
-    if (end && orderDate > end) return;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => {
+    const val = t * maxV;
+    const lbl = val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}K` : val.toFixed(0);
+    return { t, y: PT + plotH * (1 - t), lbl };
   });
 
-  return months.map((month) => ({ label: month.key, value: totals[month.key] || 0 }));
+  return { W, H, PL, PT, PB, plotW, plotH, points, linePath, areaPath, maxV, ticks, n };
 };
 
-const buildDonationPath = (points) => {
-  if (!points.length) return '';
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+const pieChartData = (summary) => {
+  const slices = [
+    { key: 'new',     label: 'New',     value: summary.new || 0,     color: '#64748b' },
+    { key: 'active',  label: 'Active',  value: summary.active || 0,  color: '#10b981' },
+    { key: 'repeat',  label: 'Repeat',  value: summary.repeat || 0,  color: '#0ea5e9' },
+    { key: 'dormant', label: 'Dormant', value: summary.dormant || 0, color: '#f59e0b' },
+    { key: 'churn',   label: 'Churned', value: summary.churn || 0,   color: '#f43f5e' },
+  ];
+  const total = slices.reduce((sum, s) => sum + s.value, 0);
+  if (total === 0) return { slices, paths: [], total: 0 };
 
-  let d = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length; i += 1) {
-    const prev = points[i - 1];
-    const current = points[i];
-    const midX = (prev.x + current.x) / 2;
-    const midY = (prev.y + current.y) / 2;
-    d += ` Q ${prev.x} ${prev.y} ${midX} ${midY}`;
+  const cx = 110; const cy = 110; const r = 88; const innerR = 44;
+  let currentAngle = -Math.PI / 2;
+
+  const paths = slices
+    .filter((s) => s.value > 0)
+    .map((s) => {
+      const angle = (s.value / total) * 2 * Math.PI;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + angle;
+      currentAngle = endAngle;
+      const x1o = cx + r * Math.cos(startAngle); const y1o = cy + r * Math.sin(startAngle);
+      const x2o = cx + r * Math.cos(endAngle);   const y2o = cy + r * Math.sin(endAngle);
+      const x1i = cx + innerR * Math.cos(endAngle);   const y1i = cy + innerR * Math.sin(endAngle);
+      const x2i = cx + innerR * Math.cos(startAngle); const y2i = cy + innerR * Math.sin(startAngle);
+      const largeArc = angle > Math.PI ? 1 : 0;
+      const d = `M ${x1o} ${y1o} A ${r} ${r} 0 ${largeArc} 1 ${x2o} ${y2o} L ${x1i} ${y1i} A ${innerR} ${innerR} 0 ${largeArc} 0 ${x2i} ${y2i} Z`;
+      return { ...s, d, percent: ((s.value / total) * 100).toFixed(1) };
+    });
+
+  return { slices, paths, total };
+};
+
+const DATE_PRESETS = [
+  { key: 'all',        label: 'All time' },
+  { key: 'today',      label: 'Today' },
+  { key: 'yesterday',  label: 'Yesterday' },
+  { key: 'this_month', label: 'This month' },
+  { key: 'last_7',     label: 'Last 7 days' },
+  { key: 'last_30',    label: 'Last 30 days' },
+  { key: 'last_3m',    label: 'Last 3 months' },
+  { key: 'last_1y',    label: 'Last 12 months' },
+  { key: 'custom',     label: 'Custom range' },
+];
+
+const getPresetDates = (key) => {
+  const today = new Date();
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  if (key === 'today') return { from: fmt(today), to: fmt(today) };
+  if (key === 'yesterday') {
+    const y = new Date(today); y.setDate(y.getDate() - 1);
+    return { from: fmt(y), to: fmt(y) };
   }
-  const last = points[points.length - 1];
-  d += ` T ${last.x} ${last.y}`;
-  return d;
-};
-
-const donationChartData = (series) => {
-  const width = 680;
-  const height = 260;
-  const padding = 32;
-  const values = series.map((item) => item.value);
-  const maxValue = Math.max(...values, 1);
-  const minValue = Math.min(...values, 0);
-  const range = maxValue - minValue || 1;
-  const plotWidth = width - padding * 2;
-  const plotHeight = height - padding * 2;
-
-  const points = series.map((item, index) => {
-    const x = padding + (index * plotWidth) / (series.length - 1);
-    const y = padding + (1 - (item.value - minValue) / range) * plotHeight;
-    return { ...item, x, y };
-  });
-
-  const path = buildDonationPath(points);
-  const areaPath = `${path} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`;
-  return { width, height, padding, points, path, areaPath, maxValue };
+  if (key === 'this_month') {
+    return { from: fmt(new Date(today.getFullYear(), today.getMonth(), 1)), to: fmt(today) };
+  }
+  if (key === 'last_7') {
+    const f = new Date(today); f.setDate(today.getDate() - 6);
+    return { from: fmt(f), to: fmt(today) };
+  }
+  if (key === 'last_30') {
+    const f = new Date(today); f.setDate(today.getDate() - 29);
+    return { from: fmt(f), to: fmt(today) };
+  }
+  if (key === 'last_3m') {
+    const f = new Date(today); f.setMonth(today.getMonth() - 3);
+    return { from: fmt(f), to: fmt(today) };
+  }
+  if (key === 'last_1y') {
+    const f = new Date(today); f.setFullYear(today.getFullYear() - 1);
+    return { from: fmt(f), to: fmt(today) };
+  }
+  return { from: '', to: '' };
 };
 
 const PER_PAGE = 50;
 
-export default function Dashboard({ summary, orders = [], loading: appLoading }) {
+const STAT_CARDS = [
+  {
+    key: 'total',
+    label: 'Total Donors',
+    icon: Users,
+    iconBg: 'bg-blue-500',
+    iconColor: 'text-white',
+    valueFn: (s) => fmt(s.total),
+  },
+  {
+    key: 'collection',
+    label: 'Total Donations',
+    icon: Banknote,
+    iconBg: 'bg-emerald-500',
+    iconColor: 'text-white',
+    valueFn: (s) => fmtShort(s.total_collection),
+    subFn: (s) => fmtRM(s.total_collection),
+  },
+  {
+    key: 'aov',
+    label: 'Avg Donation',
+    icon: TrendingUp,
+    iconBg: 'bg-violet-500',
+    iconColor: 'text-white',
+    valueFn: (s) => fmtShort(s.avg_order_value),
+    subFn: (s) => fmtRM(s.avg_order_value),
+  },
+  {
+    key: 'transactions',
+    label: 'Transactions',
+    icon: Receipt,
+    iconBg: 'bg-amber-500',
+    iconColor: 'text-white',
+    valueFn: (s) => fmt(s.total_transactions),
+  },
+];
+
+export default function Dashboard({ summary, loading: appLoading }) {
   const navigate = useNavigate();
+  const [datePreset, setDatePreset] = useState('all');
+  const [showDateMenu, setShowDateMenu] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [sourceFilter, setSourceFilter] = useState('all');
+  const [sourceFilter] = useState('all');
   const [page, setPage] = useState(1);
+  const dateMenuRef = useRef(null);
 
-  // Server-side paginated state
   const [customersData, setCustomersData] = useState({ customers: [], total: 0, page: 1, per_page: PER_PAGE, total_pages: 0 });
   const [tableLoading, setTableLoading] = useState(false);
+  const [sortCol, setSortCol] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+
+  const [chartSeries, setChartSeries] = useState([]);
+  const [chartLoading, setChartLoading] = useState(false);
 
   const fetchCustomers = useCallback(async (params) => {
     setTableLoading(true);
@@ -134,45 +214,54 @@ export default function Dashboard({ summary, orders = [], loading: appLoading })
   }, []);
 
   useEffect(() => {
-    const params = {
-      page,
-      per_page: PER_PAGE
-    };
+    const params = { page, per_page: PER_PAGE };
     if (searchQuery) params.search = searchQuery;
     if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
     if (sourceFilter && sourceFilter !== 'all') params.source = sourceFilter;
     if (startDate) params.from_date = startDate;
     if (endDate) params.to_date = endDate;
-
     fetchCustomers(params);
   }, [page, searchQuery, statusFilter, sourceFilter, startDate, endDate, fetchCustomers]);
 
-  // Reset to page 1 when filters change
   useEffect(() => {
     setPage(1);
   }, [searchQuery, statusFilter, sourceFilter, startDate, endDate]);
 
-  const start = parseDate(startDate);
-  const end = parseDate(endDate);
+  useEffect(() => {
+    setChartLoading(true);
+    const params = {};
+    if (startDate) params.from_date = startDate;
+    if (endDate) params.to_date = endDate;
+    getDonationChart(params).then((data) => {
+      setChartSeries(data || []);
+      setChartLoading(false);
+    });
+  }, [startDate, endDate]);
 
-  const ordersInRange = orders.filter((order) => {
-    const orderDate = parseDate(order.order_date);
-    if (!orderDate) return false;
-    if (start && orderDate < start) return false;
-    if (end && orderDate > end) return false;
-    return true;
-  });
+  useEffect(() => {
+    if (!showDateMenu) return;
+    const handler = (e) => {
+      if (dateMenuRef.current && !dateMenuRef.current.contains(e.target)) setShowDateMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showDateMenu]);
 
-  const donationCount = ordersInRange.length;
-  const totalCollection = ordersInRange.reduce((sum, order) => sum + Number(order.amount || 0), 0);
-  const averageDonation = donationCount ? totalCollection / donationCount : 0;
-  const donationSeries = monthlyDonationSeries(ordersInRange, startDate, endDate);
-  const chartData = donationChartData(donationSeries);
+  const handlePreset = (key) => {
+    setDatePreset(key);
+    if (key !== 'custom') {
+      const { from, to } = getPresetDates(key);
+      setStartDate(from);
+      setEndDate(to);
+    }
+    setShowDateMenu(false);
+  };
+
+  const lineData = lineChartData(chartSeries.length > 0 ? chartSeries : [{ label: '—', value: 0 }]);
 
   const formatCsvValue = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
   const exportCustomers = async () => {
-    // Fetch all matching records for export (no pagination)
     const params = { page: 1, per_page: 200 };
     if (searchQuery) params.search = searchQuery;
     if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
@@ -184,12 +273,11 @@ export default function Dashboard({ summary, orders = [], loading: appLoading })
     const data = result.customers || [];
     if (!data || data.length === 0) return;
 
-    const header = ['Nama', 'Telefon', 'Emel', 'Sumber', 'Pesanan', 'Jumlah', 'Pembelian pertama', 'Pembelian terkini', 'AOV', 'Status'];
+    const header = ['Name', 'Phone', 'Email', 'Transactions', 'Total', 'First Donation', 'Latest Donation', 'AOV', 'Status'];
     const rows = data.map((customer) => [
       customer.full_name,
       customer.phone || '',
       customer.email || '',
-      customer.source || 'Lain-lain',
       customer.total_orders,
       customer.total_spent.toFixed(2),
       customer.first_purchase_date || '',
@@ -209,212 +297,325 @@ export default function Dashboard({ summary, orders = [], loading: appLoading })
     URL.revokeObjectURL(url);
   };
 
-  const { customers, total, total_pages } = customersData;
+  const sortKeys = {
+    transactions: 'total_orders',
+    total:        'total_spent',
+    first:        'first_purchase_date',
+    latest:       'last_purchase_date',
+    average:      'aov',
+    highvalue:    'highvalue',
+    status:       'status',
+  };
+
+  const handleSort = (col) => {
+    if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortCol(col); setSortDir('asc'); }
+  };
+
+  const sortedCustomers = sortCol
+    ? [...(customersData.customers || [])].sort((a, b) => {
+        const key = sortKeys[sortCol] || sortCol;
+        let va = a[key]; let vb = b[key];
+        if (va == null) va = ''; if (vb == null) vb = '';
+        const cmp = typeof va === 'number'
+          ? va - vb
+          : String(va).localeCompare(String(vb));
+        return sortDir === 'asc' ? cmp : -cmp;
+      })
+    : (customersData.customers || []);
+
+  const SortIcon = ({ col }) => {
+    if (sortCol !== col) return <ChevronUp className="h-3 w-3 opacity-25" />;
+    return sortDir === 'asc'
+      ? <ChevronUp className="h-3 w-3 text-blue-500" />
+      : <ChevronDown className="h-3 w-3 text-blue-500" />;
+  };
+
+  const SortTh = ({ col, children }) => (
+    <th
+      className="px-5 py-3.5 font-semibold cursor-pointer select-none hover:bg-slate-100 transition"
+      onClick={() => handleSort(col)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        <SortIcon col={col} />
+      </span>
+    </th>
+  );
+
+  const { total, total_pages } = customersData;
+  const customers = sortedCustomers;
   const currentPage = customersData.page || 1;
   const startIdx = (currentPage - 1) * PER_PAGE + 1;
   const endIdx = Math.min(currentPage * PER_PAGE, total);
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Dashboard</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Gambaran keseluruhan sumbangan NGO</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Lihat jumlah dermawan, jumlah sumbangan dan graf bulanan dalam satu tempat.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={exportCustomers}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              <Download className="h-4 w-4" />
-              Eksport CSV
-            </button>
-            <Link
-              to="/order-input"
-              className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              <PlusCircle className="h-4 w-4" />
-              Tambah sumbangan
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-4 xl:grid-cols-4">
-        {[
-          { label: 'Jumlah dermawan', value: startDate || endDate ? customers.length : summary.total, icon: Users, accent: 'bg-slate-900 text-white' },
-          { label: 'Jumlah sumbangan', value: `RM ${totalCollection.toFixed(2)}`, icon: Zap, accent: 'bg-emerald-50 text-emerald-700' },
-          { label: 'Purata sumbangan', value: `RM ${averageDonation.toFixed(2)}`, icon: TrendingUp, accent: 'bg-sky-50 text-sky-700' },
-          { label: 'Transaksi sumbangan', value: donationCount, icon: Activity, accent: 'bg-amber-50 text-amber-700' }
-        ].map((card) => (
-          <div key={card.label} className="rounded-2xl bg-white p-5 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">{card.label}</p>
-                <p className="mt-4 text-2xl font-semibold text-slate-950">{card.value}</p>
-              </div>
-              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${card.accent}`}>
-                <card.icon className="h-5 w-5" />
-              </div>
+    <div className="space-y-6">
+      {/* Action bar */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {/* Date preset dropdown */}
+        <div className="relative" ref={dateMenuRef}>
+          <button
+            type="button"
+            onClick={() => setShowDateMenu((v) => !v)}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            <Calendar className="h-4 w-4 text-slate-400" />
+            {DATE_PRESETS.find((p) => p.key === datePreset)?.label}
+            {datePreset !== 'all' && startDate && (
+              <span className="font-normal text-slate-400 text-xs">
+                {startDate}{endDate && endDate !== startDate ? ` – ${endDate}` : ''}
+              </span>
+            )}
+            <ChevronDown className="h-4 w-4 text-slate-400" />
+          </button>
+          {showDateMenu && (
+            <div className="absolute right-0 top-full mt-1.5 z-20 min-w-[180px] rounded-xl bg-white py-1.5 shadow-lg ring-1 ring-slate-200">
+              {DATE_PRESETS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => handlePreset(p.key)}
+                  className={`w-full px-4 py-2 text-left text-sm transition hover:bg-slate-50 ${datePreset === p.key ? 'font-semibold text-blue-600' : 'text-slate-700'}`}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
+          )}
+        </div>
+        {/* Custom date inputs — shown only when Custom range is selected */}
+        {datePreset === 'custom' && (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            />
+            <span className="text-slate-400 text-sm">—</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            />
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={exportCustomers}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+        >
+          <Download className="h-4 w-4" />
+          Export CSV
+        </button>
+        <Link
+          to="/order-input"
+          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+        >
+          <PlusCircle className="h-4 w-4" />
+          Add Donation
+        </Link>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {STAT_CARDS.map((card) => (
+          <div key={card.key} className="rounded-xl bg-white px-5 py-4 border border-slate-200">
+            <div className="flex items-center gap-2 mb-3">
+              <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
+                <card.icon className={`h-3.5 w-3.5 ${card.iconColor}`} />
+              </div>
+              <p className="text-xs font-semibold text-slate-500">{card.label}</p>
+            </div>
+            <p className="text-[1.6rem] font-bold text-slate-900 leading-none tracking-tight truncate">{card.valueFn(summary)}</p>
+            {card.subFn && (
+              <p className="mt-1 text-xs text-slate-400 truncate">{card.subFn(summary)}</p>
+            )}
           </div>
         ))}
       </div>
 
-      <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* Line chart — full width */}
+      <div className="rounded-xl bg-white border border-slate-200 p-5">
+        <div className="flex items-start justify-between mb-4">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.26em] text-slate-500">Graf sumbangan</p>
-            <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Jumlah sumbangan bulanan</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Graf ini menunjukkan jumlah sumbangan mengikut bulan untuk tempoh enam bulan terakhir.</p>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Donation Volume</p>
+            <h3 className="mt-0.5 text-sm font-semibold text-slate-800">Monthly Totals</h3>
           </div>
-          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">Jumlah sumbangan: RM {summary.total_collection?.toFixed(2) || '0.00'}</div>
+          {(startDate || endDate) && (
+            <span className="text-xs text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
+              {startDate || '—'} → {endDate || '—'}
+            </span>
+          )}
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-5">
-          <div className="relative overflow-hidden rounded-xl bg-white p-4 shadow-sm">
-            <svg viewBox="0 0 680 260" className="w-full h-[260px]">
+        {chartLoading ? (
+          <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">Loading…</div>
+        ) : (() => {
+          const labelStep = lineData.n > 14 ? Math.ceil(lineData.n / 14) : 1;
+          return (
+            <svg viewBox={`0 0 ${lineData.W} ${lineData.H}`} className="w-full h-[280px]">
               <defs>
-                <linearGradient id="donationGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#0f172a" stopOpacity="0.22" />
-                  <stop offset="100%" stopColor="#0f172a" stopOpacity="0" />
-                </linearGradient>
-                <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#0284c7" />
-                  <stop offset="100%" stopColor="#2563eb" />
+                <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity="0.12" />
+                  <stop offset="80%" stopColor="#6366f1" stopOpacity="0.01" />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
                 </linearGradient>
               </defs>
-              <g opacity="0.45">
-                <line x1="40" y1="42" x2="640" y2="42" stroke="#e2e8f0" strokeWidth="1" />
-                <line x1="40" y1="104" x2="640" y2="104" stroke="#e2e8f0" strokeWidth="1" />
-                <line x1="40" y1="166" x2="640" y2="166" stroke="#e2e8f0" strokeWidth="1" />
-                <line x1="40" y1="228" x2="640" y2="228" stroke="#e2e8f0" strokeWidth="1" />
-              </g>
-              <path d={chartData.areaPath} fill="url(#donationGradient)" />
-              <path d={chartData.path} fill="none" stroke="url(#lineGradient)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-              {chartData.points.map((point) => (
-                <g key={point.label}>
-                  <circle cx={point.x} cy={point.y} r="6" fill="#ffffff" stroke="#2563eb" strokeWidth="3" />
-                  <circle cx={point.x} cy={point.y} r="3" fill="#0f172a" />
+              {/* Grid lines */}
+              {lineData.ticks.map((tick) => (
+                <g key={tick.t}>
+                  {tick.t > 0 && (
+                    <line x1={lineData.PL} y1={tick.y} x2={lineData.W - lineData.PR} y2={tick.y}
+                      stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 3" />
+                  )}
+                  <text x={lineData.PL - 8} y={tick.y + 4} fill="#94a3b8" fontSize="9.5" textAnchor="end">{tick.lbl}</text>
                 </g>
               ))}
-              {chartData.points.map((point) => (
-                <text key={`${point.label}-label`} x={point.x} y="250" fill="#64748b" fontSize="11" textAnchor="middle">
-                  {point.label}
-                </text>
+              {/* X-axis base line */}
+              <line x1={lineData.PL} y1={lineData.PT + lineData.plotH} x2={lineData.W - lineData.PR} y2={lineData.PT + lineData.plotH} stroke="#e2e8f0" strokeWidth="1" />
+              {/* Area fill */}
+              {lineData.areaPath && <path d={lineData.areaPath} fill="url(#lineGrad)" />}
+              {/* Line */}
+              {lineData.linePath && (
+                <path d={lineData.linePath} fill="none" stroke="#6366f1" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+              )}
+              {/* Dots + labels — skip labels when too dense */}
+              {lineData.points.map((p, i) => (
+                <g key={i}>
+                  <circle cx={p.x} cy={p.y} r={lineData.n > 40 ? 1.5 : 3} fill="#fff" stroke="#6366f1" strokeWidth="2" />
+                  {i % labelStep === 0 && (
+                    <text x={p.x} y={lineData.H - lineData.PB + 14} fill="#94a3b8" fontSize="9.5" textAnchor="middle">{p.label}</text>
+                  )}
+                </g>
               ))}
             </svg>
-          </div>
-        </div>
-      </section>
-
-      {/* Advanced charts grid */}
-      <div className="grid gap-6 xl:grid-cols-2">
-        <DonorGrowthChart />
-        <NewVsReturningChart />
-        <SourceDonutChart />
-        <YoyChart />
+          );
+        })()}
       </div>
 
-      <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0 space-y-4">
-            <label className="sr-only" htmlFor="dashboard-search">Cari dermawan</label>
+      {/* Donor Status donut */}
+      <div className="rounded-xl bg-white border border-slate-200 p-5">
+        <div className="mb-4">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Overview</p>
+          <h3 className="mt-0.5 text-sm font-semibold text-slate-800">Donor Status</h3>
+        </div>
+        {(() => {
+          const pie = pieChartData(summary);
+          return (
+            <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
+              <svg viewBox="0 0 220 220" className="w-[130px] shrink-0">
+                {pie.total === 0 ? (
+                  <circle cx="110" cy="110" r="88" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1" />
+                ) : (
+                  pie.paths.map((seg) => (
+                    <path key={seg.key} d={seg.d} fill={seg.color} opacity="0.9">
+                      <title>{seg.label}: {seg.value} ({seg.percent}%)</title>
+                    </path>
+                  ))
+                )}
+                <circle cx="110" cy="110" r="52" fill="white" />
+                <text x="110" y="106" textAnchor="middle" fill="#0f172a" fontSize="18" fontWeight="700">{pie.total.toLocaleString('en-MY')}</text>
+                <text x="110" y="122" textAnchor="middle" fill="#94a3b8" fontSize="9">donors</text>
+              </svg>
+              <div className="flex flex-wrap gap-x-8 gap-y-2 flex-1">
+                {pie.paths.map((seg) => (
+                  <div key={seg.key} className="flex items-center justify-between gap-4 text-xs min-w-[140px]">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: seg.color }} />
+                      <span className="text-slate-600">{seg.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-800">{seg.value.toLocaleString('en-MY')}</span>
+                      <span className="text-slate-400">{seg.percent}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Filter bar */}
+      <div className="rounded-xl bg-white border border-slate-200 p-4">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="space-y-4 flex-1 min-w-0">
             <div className="relative">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                id="dashboard-search"
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-12 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
-                placeholder="Cari dermawan..."
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-12 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                placeholder="Search donor by name, email or phone…"
               />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700" htmlFor="start-date">Dari tarikh</label>
-                <input
-                  id="start-date"
-                  type="date"
-                  value={startDate}
-                  onChange={(event) => setStartDate(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700" htmlFor="end-date">Hingga tarikh</label>
-                <input
-                  id="end-date"
-                  type="date"
-                  value={endDate}
-                  onChange={(event) => setEndDate(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200"
-                />
-              </div>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {['all', 'new', 'active', 'repeat', 'dormant', 'churn'].map((status) => (
+            {[
+              { key: 'all',     active: 'bg-slate-900 text-white',         inactive: 'bg-slate-100 text-slate-600 hover:bg-slate-200' },
+              { key: 'new',     active: 'bg-slate-500 text-white',         inactive: 'bg-slate-100 text-slate-600 hover:bg-slate-200' },
+              { key: 'active',  active: 'bg-emerald-500 text-white',       inactive: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' },
+              { key: 'repeat',  active: 'bg-sky-500 text-white',           inactive: 'bg-sky-50 text-sky-700 hover:bg-sky-100' },
+              { key: 'dormant', active: 'bg-amber-500 text-white',         inactive: 'bg-amber-50 text-amber-700 hover:bg-amber-100' },
+              { key: 'churn',   active: 'bg-rose-500 text-white',          inactive: 'bg-rose-50 text-rose-700 hover:bg-rose-100' },
+            ].map(({ key, active, inactive }) => (
               <button
-                key={status}
+                key={key}
                 type="button"
-                onClick={() => setStatusFilter(status)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  statusFilter === status
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
+                onClick={() => setStatusFilter(key)}
+                className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition ${statusFilter === key ? active : inactive}`}
               >
-                {statusLabels[status]}
+                {statusLabels[key]}
               </button>
             ))}
           </div>
         </div>
-      </section>
+      </div>
 
-      <section className="rounded-2xl bg-white p-6 shadow-xl shadow-slate-900/5 ring-1 ring-slate-200">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* Donor table */}
+      <div className="rounded-xl bg-white border border-slate-200">
+        <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100">
           <div>
-            <h3 className="text-xl font-semibold text-slate-950">Senarai dermawan</h3>
-            <p className="mt-1 text-sm text-slate-500">Semak taburan sumbangan, nilai transaksi dan dermawan terkini.</p>
+            <h3 className="text-base font-bold text-slate-900">Donor List</h3>
+            <p className="mt-0.5 text-sm text-slate-500">All donors with donation totals and status.</p>
           </div>
           {total > 0 ? (
             <p className="text-sm text-slate-500">
-              Memaparkan {startIdx}–{endIdx} daripada {total} dermawan
+              {fmt(startIdx)}–{fmt(endIdx)} of {fmt(total)} donors
             </p>
           ) : (
-            <p className="text-sm text-slate-500">0 dermawan</p>
+            <p className="text-sm text-slate-500">0 donors</p>
           )}
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
-          <table className="min-w-full divide-y divide-slate-200 text-left text-sm text-slate-600">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-100 text-left text-sm text-slate-600">
             <thead className="bg-slate-50 text-slate-700">
               <tr>
-                <th className="px-4 py-4 font-semibold">Dermawan</th>
-                <th className="px-4 py-4 font-semibold">Telefon</th>
-                <th className="px-4 py-4 font-semibold">Sumber</th>
-                <th className="px-4 py-4 font-semibold">Transaksi</th>
-                <th className="px-4 py-4 font-semibold">Jumlah</th>
-                <th className="px-4 py-4 font-semibold">Sumbangan pertama</th>
-                <th className="px-4 py-4 font-semibold">Sumbangan terkini</th>
-                <th className="px-4 py-4 font-semibold">Purata</th>
-                <th className="px-4 py-4 font-semibold">Status</th>
+                <th className="px-5 py-3.5 font-semibold">Donor</th>
+                <th className="px-5 py-3.5 font-semibold">Phone</th>
+                <SortTh col="transactions">Transactions</SortTh>
+                <SortTh col="total">Total</SortTh>
+                <SortTh col="first">First Donation</SortTh>
+                <SortTh col="latest">Latest Donation</SortTh>
+                <SortTh col="average">Average</SortTh>
+                <SortTh col="highvalue">High Value</SortTh>
+                <SortTh col="status">Status</SortTh>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {appLoading || tableLoading ? (
                 <tr>
-                  <td colSpan="9" className="px-4 py-10 text-center text-slate-500">Memuatkan data dermawan…</td>
+                  <td colSpan="9" className="px-5 py-10 text-center text-slate-400">Loading donor data…</td>
                 </tr>
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="px-4 py-10 text-center text-slate-500">Tiada pelanggan sepadan. Tukar penapis atau tambah pesanan baru.</td>
+                  <td colSpan="9" className="px-5 py-10 text-center text-slate-400">No donors found. Adjust filters or add a new donation.</td>
                 </tr>
               ) : (
                 customers.map((customer) => (
@@ -423,28 +624,32 @@ export default function Dashboard({ summary, orders = [], loading: appLoading })
                     onClick={() => navigate(`/customer/${customer.id}`)}
                     className="cursor-pointer transition hover:bg-slate-50"
                   >
-                    <td className="px-4 py-4">
+                    <td className="px-5 py-4">
                       <Link to={`/customer/${customer.id}`} className="flex items-center gap-3 text-slate-900 hover:text-slate-700">
-                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold uppercase text-slate-700">
+                        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold uppercase text-blue-700">
                           {customer.full_name?.charAt(0) || 'C'}
                         </span>
                         <div>
                           <p className="font-semibold">{customer.full_name}</p>
-                          <p className="text-xs text-slate-500">{customer.email || 'Tiada emel'}</p>
+                          <p className="text-xs text-slate-400">{customer.email || 'No email'}</p>
                         </div>
                       </Link>
                     </td>
-                    <td className="px-4 py-4">{customer.phone || '—'}</td>
-                    <td className="px-4 py-4 capitalize">{customer.source || 'lain-lain'}</td>
-                    <td className="px-4 py-4">{customer.total_orders}</td>
-                    <td className="px-4 py-4 font-semibold text-slate-900">RM {customer.total_spent.toFixed(2)}</td>
-                    <td className="px-4 py-4">{customer.first_purchase_date || '—'}</td>
-                    <td className="px-4 py-4">{customer.last_purchase_date || '—'}</td>
-                    <td className="px-4 py-4">RM {customer.aov.toFixed(2)}</td>
-                    <td className="px-4 py-4">
+                    <td className="px-5 py-4">{customer.phone || '—'}</td>
+                    <td className="px-5 py-4">{fmt(customer.total_orders)}</td>
+                    <td className="px-5 py-4 font-semibold text-slate-900">{fmtRM(customer.total_spent)}</td>
+                    <td className="px-5 py-4">{customer.first_purchase_date || '—'}</td>
+                    <td className="px-5 py-4">{customer.last_purchase_date || '—'}</td>
+                    <td className="px-5 py-4">{fmtRM(customer.aov)}</td>
+                    <td className="px-5 py-4">
+                      <span className="text-base">
+                        {customer.highvalue === 'Yes' ? '✅' : '❌'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">
                       <span
                         className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusBadges[customer.status] || statusBadges.new}`}
-                        title={statusDescriptions[customer.status] || 'Status pelanggan tidak diketahui.'}
+                        title={statusDescriptions[customer.status] || 'Unknown donor status.'}
                       >
                         {statusLabels[customer.status] || customer.status}
                       </span>
@@ -457,31 +662,31 @@ export default function Dashboard({ summary, orders = [], loading: appLoading })
         </div>
 
         {total_pages > 1 && (
-          <div className="mt-4 flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 px-5 py-4 border-t border-slate-100">
             <button
               type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={currentPage <= 1}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ChevronLeft className="h-4 w-4" />
-              Sebelum
+              Previous
             </button>
             <span className="text-sm text-slate-500">
-              Halaman {currentPage} daripada {total_pages}
+              Page {currentPage} of {total_pages}
             </span>
             <button
               type="button"
               onClick={() => setPage((p) => Math.min(total_pages, p + 1))}
               disabled={currentPage >= total_pages}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Seterusnya
+              Next
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         )}
-      </section>
+      </div>
     </div>
   );
 }

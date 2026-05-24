@@ -9,7 +9,8 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.text({ limit: '50mb' }));
 
 await initDb();
 
@@ -99,59 +100,71 @@ function requireAuth(minRole = 'viewer') {
 
 // ─── Helper functions ─────────────────────────────────────────────────────────
 
-function parseCustomerRow(row) {
+async function logActivity(req, action, details = {}) {
+  try {
+    await supabase.from('activity_logs').insert([{
+      user_email: req.user?.email || null,
+      user_role:  req.user?.role  || null,
+      action,
+      details,
+    }]);
+  } catch (_) { /* non-critical, never throw */ }
+}
+
+// Maps a donors row to the shape the frontend expects (uses full_name, not name)
+function parseDonorRow(row) {
   return {
     id: row.id,
-    full_name: row.full_name,
-    phone: row.phone,
-    email: row.email,
-    source: row.source,
+    full_name: row.name || row.full_name || '',
+    phone: row.phone || '',
+    email: row.email || '',
+    source: row.source || '',
     campaign: row.campaign || '',
     created_at: row.created_at,
-    updated_at: row.updated_at,
+    updated_at: row.updated_at || row.created_at,
     total_orders: row.total_orders || 0,
     total_spent: row.total_spent || 0,
-    first_purchase_date: row.first_purchase_date,
-    last_purchase_date: row.last_purchase_date,
+    first_purchase_date: row.first_purchase_date || null,
+    last_purchase_date: row.last_purchase_date || null,
     ltv: row.total_spent || 0,
-    aov: row.total_orders ? Number((row.total_spent / row.total_orders).toFixed(2)) : 0,
+    aov: row.total_orders ? Number(((row.total_spent || 0) / row.total_orders).toFixed(2)) : 0,
     status: row.status || 'new'
   };
 }
 
-function computeStatus(lastPurchaseDate, totalOrders) {
-  if (!lastPurchaseDate || totalOrders === 0) return 'new';
-  const daysSince = Math.floor((new Date() - new Date(lastPurchaseDate)) / (1000 * 60 * 60 * 24));
-  if (daysSince > 180) return 'churn';
+function computeStatus(lastDonationDate, totalDonations) {
+  if (!lastDonationDate || totalDonations === 0) return 'new';
+  const daysSince = Math.floor((new Date() - new Date(lastDonationDate)) / (1000 * 60 * 60 * 24));
+  if (daysSince > 365) return 'churn';
   if (daysSince > 90) return 'dormant';
-  if (totalOrders >= 2) return 'repeat';
+  if (totalDonations >= 2) return 'repeat';
+  if (daysSince <= 30) return 'new';
   return 'active';
 }
 
-function buildOrderStats(orders) {
+function buildDonationStats(donations) {
   const stats = {};
-  orders.forEach((order) => {
-    const customerId = order.customer_id;
-    if (!stats[customerId]) {
-      stats[customerId] = {
+  donations.forEach((donation) => {
+    const donorId = donation.donor_id;
+    if (!stats[donorId]) {
+      stats[donorId] = {
         total_orders: 0,
         total_spent: 0,
         first_purchase_date: null,
-        last_purchase_date: null
+        last_purchase_date: null,
+        source: donation.source || 'manual'
       };
     }
 
-    const customerStats = stats[customerId];
-    const amount = Number(order.amount) || 0;
-    customerStats.total_orders += 1;
-    customerStats.total_spent += amount;
+    const s = stats[donorId];
+    const amount = Number(donation.amount) || 0;
+    s.total_orders += 1;
+    s.total_spent += amount;
+    s.source = donation.source || s.source;
 
-    if (!customerStats.first_purchase_date || new Date(order.order_date) < new Date(customerStats.first_purchase_date)) {
-      customerStats.first_purchase_date = order.order_date;
-    }
-    if (!customerStats.last_purchase_date || new Date(order.order_date) > new Date(customerStats.last_purchase_date)) {
-      customerStats.last_purchase_date = order.order_date;
-    }
+    const date = donation.donation_date;
+    if (!s.first_purchase_date || date < s.first_purchase_date) s.first_purchase_date = date;
+    if (!s.last_purchase_date || date > s.last_purchase_date) s.last_purchase_date = date;
   });
 
   return stats;
@@ -198,7 +211,7 @@ function parseCsvLine(line) {
 }
 
 function parseCsv(csvText) {
-  const expectedHeaders = ['full_name', 'phone', 'email', 'order_date', 'amount', 'source', 'campaign'];
+  const expectedHeaders = ['name', 'phone', 'email', 'donation_date', 'amount', 'source', 'campaign'];
   const lines = csvText
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -223,6 +236,54 @@ function parseCsv(csvText) {
       return acc;
     }, {});
   });
+}
+
+// Upsert a donor by phone/email, return { donorId, isNew, donor }
+async function upsertDonor({ name, phone, email }) {
+  let existing = null;
+
+  if (phone) {
+    const { data } = await supabase.from('donors').select('*').eq('phone', phone).limit(1);
+    existing = (data && data.length > 0) ? data[0] : null;
+  }
+  if (!existing && email) {
+    const { data } = await supabase.from('donors').select('*').eq('email', email.toLowerCase()).limit(1);
+    existing = (data && data.length > 0) ? data[0] : null;
+  }
+
+  if (existing) {
+    return { donorId: existing.id, isNew: false, donor: existing };
+  }
+
+  const { data: newDonor, error } = await supabase.from('donors').insert([{
+    name: name || 'Unknown',
+    phone: phone || null,
+    email: email ? email.toLowerCase() : null,
+  }]).select('*').single();
+
+  // If UNIQUE violation (race condition), fetch existing
+  if (error?.code === '23505') {
+    const key = phone ? { phone } : { email: email.toLowerCase() };
+    const field = phone ? 'phone' : 'email';
+    const { data: retry } = await supabase.from('donors').select('*').eq(field, key[field]).limit(1);
+    const found = retry?.[0];
+    return { donorId: found?.id, isNew: false, donor: found };
+  }
+
+  return { donorId: newDonor?.id, isNew: true, donor: newDonor };
+}
+
+// ─── Inbound log helper ───────────────────────────────────────────────────────
+
+async function logInbound(event) {
+  try {
+    await supabase.from('webhook_logs').insert([{
+      event,
+      status: 'success',
+      response_code: 200,
+      created_at: new Date().toISOString()
+    }]);
+  } catch { /* nullable FK — ignore if column constraint blocks it */ }
 }
 
 // ─── Outbound Webhooks ────────────────────────────────────────────────────────
@@ -298,6 +359,8 @@ app.post('/api/admin/login', async (req, res) => {
       return res.status(401).json({ error: 'Emel atau kata laluan tidak sah.' });
     }
     const token = generateToken(userRow.id, userRow.email, userRow.role);
+    req.user = { userId: userRow.id, email: userRow.email, role: userRow.role };
+    await logActivity(req, 'login', { method: 'users_table' });
     return res.json({
       token,
       user: { id: userRow.id, email: userRow.email, full_name: userRow.full_name, role: userRow.role }
@@ -306,6 +369,8 @@ app.post('/api/admin/login', async (req, res) => {
 
   // Fallback: env var credentials
   if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+    req.user = { userId: 0, email: ADMIN_EMAIL, role: 'admin' };
+    await logActivity(req, 'login', { method: 'env_fallback' });
     return res.json({
       token: ADMIN_TOKEN,
       user: { id: 0, email: ADMIN_EMAIL, full_name: 'Admin', role: 'admin' }
@@ -321,57 +386,29 @@ app.post('/api/webhooks/receive/:secret', async (req, res) => {
   const body = req.body || {};
   const now = new Date().toISOString();
 
-  // Validate secret against configured webhooks (optional – just log)
   const name = body.name || body.full_name || body.customer_name || 'Unknown';
   const phone = body.phone || body.mobile || '';
   const email = body.email || '';
   const amount = Number(body.amount || body.total || body.price || 0);
-  const orderDate = body.date || body.order_date || now.slice(0, 10);
+  const donationDate = body.date || body.donation_date || body.order_date || now.slice(0, 10);
   const source = body.source || `webhook:${secret}`;
 
-  let existingCustomer = null;
-  if (phone) {
-    const { data } = await supabase.from('customers').select('*').eq('phone', phone).maybeSingle();
-    existingCustomer = data || null;
-  }
-  if (!existingCustomer && email) {
-    const { data } = await supabase.from('customers').select('*').eq('email', email).maybeSingle();
-    existingCustomer = data || null;
-  }
+  const { donorId, isNew, donor } = await upsertDonor({ name, phone, email });
 
-  let customerId;
-  let isNewCustomer = false;
+  if (isNew) fireWebhooks('donor.created', donor);
 
-  if (existingCustomer) {
-    customerId = existingCustomer.id;
-    await supabase.from('customers').update({ updated_at: now }).eq('id', customerId);
-  } else {
-    const { data: newCust } = await supabase.from('customers').insert([{
-      full_name: name,
-      phone: phone || '',
-      email: email || '',
-      source,
-      campaign: '',
-      created_at: now,
-      updated_at: now
-    }]).select('*').single();
-    customerId = newCust?.id;
-    isNewCustomer = true;
-    fireWebhooks('customer.created', newCust);
-  }
-
-  const { data: newOrder } = await supabase.from('orders').insert([{
-    external_order_id: `WH-${secret.slice(0, 8)}-${Date.now()}`,
-    customer_id: customerId,
-    order_date: orderDate,
+  const { data: newDonation } = await supabase.from('donations').insert([{
+    donor_id: donorId,
+    donation_date: donationDate,
     amount,
     source,
     created_at: now
   }]).select('*').single();
 
-  fireWebhooks('order.created', newOrder);
+  fireWebhooks('donation.created', newDonation);
 
-  res.json({ success: true, customer_id: customerId, new_customer: isNewCustomer });
+  logInbound('inbound.receive');
+  res.json({ success: true, donor_id: donorId, new_donor: isNew });
 });
 
 // Shopify integration
@@ -383,46 +420,25 @@ app.post('/api/integrations/shopify', async (req, res) => {
   const phone = customer.phone || '';
   const email = customer.email || '';
   const amount = Number(order.total_price || 0);
-  const orderDate = order.created_at ? order.created_at.slice(0, 10) : now.slice(0, 10);
+  const donationDate = order.created_at ? order.created_at.slice(0, 10) : now.slice(0, 10);
   const source = order.source_name || 'shopify';
 
-  let existingCustomer = null;
-  if (phone) {
-    const { data } = await supabase.from('customers').select('*').eq('phone', phone).maybeSingle();
-    existingCustomer = data || null;
-  }
-  if (!existingCustomer && email) {
-    const { data } = await supabase.from('customers').select('*').eq('email', email).maybeSingle();
-    existingCustomer = data || null;
-  }
+  const { donorId, isNew, donor } = await upsertDonor({ name, phone, email });
 
-  let customerId;
-  let isNewCustomer = false;
+  if (isNew) fireWebhooks('donor.created', donor);
 
-  if (existingCustomer) {
-    customerId = existingCustomer.id;
-    await supabase.from('customers').update({ full_name: name, updated_at: now }).eq('id', customerId);
-  } else {
-    const { data: newCust } = await supabase.from('customers').insert([{
-      full_name: name, phone, email, source, campaign: '', created_at: now, updated_at: now
-    }]).select('*').single();
-    customerId = newCust?.id;
-    isNewCustomer = true;
-    fireWebhooks('customer.created', newCust);
-  }
-
-  const { data: newOrder } = await supabase.from('orders').insert([{
-    external_order_id: `SHOPIFY-${order.id || Date.now()}`,
-    customer_id: customerId,
-    order_date: orderDate,
+  const { data: newDonation } = await supabase.from('donations').insert([{
+    donor_id: donorId,
+    donation_date: donationDate,
     amount,
     source,
     created_at: now
   }]).select('*').single();
 
-  fireWebhooks('order.created', newOrder);
+  fireWebhooks('donation.created', newDonation);
 
-  res.json({ success: true, customer_id: customerId, new_customer: isNewCustomer });
+  logInbound('inbound.shopify');
+  res.json({ success: true, donor_id: donorId, new_donor: isNew });
 });
 
 // WooCommerce integration
@@ -434,46 +450,24 @@ app.post('/api/integrations/woocommerce', async (req, res) => {
   const phone = billing.phone || '';
   const email = billing.email || '';
   const amount = Number(order.total || 0);
-  const orderDate = order.date_created ? order.date_created.slice(0, 10) : now.slice(0, 10);
-  const source = order.payment_method_title || 'woocommerce';
+  const donationDate = order.date_created ? order.date_created.slice(0, 10) : now.slice(0, 10);
 
-  let existingCustomer = null;
-  if (phone) {
-    const { data } = await supabase.from('customers').select('*').eq('phone', phone).maybeSingle();
-    existingCustomer = data || null;
-  }
-  if (!existingCustomer && email) {
-    const { data } = await supabase.from('customers').select('*').eq('email', email).maybeSingle();
-    existingCustomer = data || null;
-  }
+  const { donorId, isNew, donor } = await upsertDonor({ name, phone, email });
 
-  let customerId;
-  let isNewCustomer = false;
+  if (isNew) fireWebhooks('donor.created', donor);
 
-  if (existingCustomer) {
-    customerId = existingCustomer.id;
-    await supabase.from('customers').update({ full_name: name, updated_at: now }).eq('id', customerId);
-  } else {
-    const { data: newCust } = await supabase.from('customers').insert([{
-      full_name: name, phone, email, source, campaign: '', created_at: now, updated_at: now
-    }]).select('*').single();
-    customerId = newCust?.id;
-    isNewCustomer = true;
-    fireWebhooks('customer.created', newCust);
-  }
-
-  const { data: newOrder } = await supabase.from('orders').insert([{
-    external_order_id: `WOO-${order.id || Date.now()}`,
-    customer_id: customerId,
-    order_date: orderDate,
+  const { data: newDonation } = await supabase.from('donations').insert([{
+    donor_id: donorId,
+    donation_date: donationDate,
     amount,
     source: 'woocommerce',
     created_at: now
   }]).select('*').single();
 
-  fireWebhooks('order.created', newOrder);
+  fireWebhooks('donation.created', newDonation);
 
-  res.json({ success: true, customer_id: customerId, new_customer: isNewCustomer });
+  logInbound('inbound.woocommerce');
+  res.json({ success: true, donor_id: donorId, new_donor: isNew });
 });
 
 // Generic integration
@@ -484,46 +478,25 @@ app.post('/api/integrations/generic', async (req, res) => {
   const phone = body.phone || body.mobile || '';
   const email = body.email || '';
   const amount = Number(body.amount || body.total || body.price || 0);
-  const orderDate = body.date || body.order_date || now.slice(0, 10);
+  const donationDate = body.date || body.donation_date || body.order_date || now.slice(0, 10);
   const source = body.source || 'generic';
 
-  let existingCustomer = null;
-  if (phone) {
-    const { data } = await supabase.from('customers').select('*').eq('phone', phone).maybeSingle();
-    existingCustomer = data || null;
-  }
-  if (!existingCustomer && email) {
-    const { data } = await supabase.from('customers').select('*').eq('email', email).maybeSingle();
-    existingCustomer = data || null;
-  }
+  const { donorId, isNew, donor } = await upsertDonor({ name, phone, email });
 
-  let customerId;
-  let isNewCustomer = false;
+  if (isNew) fireWebhooks('donor.created', donor);
 
-  if (existingCustomer) {
-    customerId = existingCustomer.id;
-    await supabase.from('customers').update({ updated_at: now }).eq('id', customerId);
-  } else {
-    const { data: newCust } = await supabase.from('customers').insert([{
-      full_name: name, phone, email, source, campaign: '', created_at: now, updated_at: now
-    }]).select('*').single();
-    customerId = newCust?.id;
-    isNewCustomer = true;
-    fireWebhooks('customer.created', newCust);
-  }
-
-  const { data: newOrder } = await supabase.from('orders').insert([{
-    external_order_id: `GENERIC-${Date.now()}`,
-    customer_id: customerId,
-    order_date: orderDate,
+  const { data: newDonation } = await supabase.from('donations').insert([{
+    donor_id: donorId,
+    donation_date: donationDate,
     amount,
     source,
     created_at: now
   }]).select('*').single();
 
-  fireWebhooks('order.created', newOrder);
+  fireWebhooks('donation.created', newDonation);
 
-  res.json({ success: true, customer_id: customerId, new_customer: isNewCustomer });
+  logInbound('inbound.generic');
+  res.json({ success: true, donor_id: donorId, new_donor: isNew });
 });
 
 // ─── Protected routes ─────────────────────────────────────────────────────────
@@ -563,11 +536,12 @@ app.post('/api/users', requireAuth('admin'), async (req, res) => {
   }]).select('id, email, full_name, role, active, created_at, updated_at').single();
 
   if (error) return res.status(500).json({ error: error.message });
+  await logActivity(req, 'create_user', { target_email: email, role: role || 'viewer' });
   res.json(data);
 });
 
 app.put('/api/users/:id', requireAuth('admin'), async (req, res) => {
-  const id = Number(req.params.id);
+  const id = req.params.id;
   const { full_name, role, active, password } = req.body;
 
   const now = new Date().toISOString();
@@ -580,15 +554,17 @@ app.put('/api/users/:id', requireAuth('admin'), async (req, res) => {
   const { error } = await supabase.from('users').update(updates).eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
 
+  await logActivity(req, 'update_user', { target_id: id, changes: Object.keys(updates).filter(k => k !== 'updated_at') });
   const { data } = await supabase.from('users').select('id, email, full_name, role, active, created_at, updated_at').eq('id', id).single();
   res.json(data);
 });
 
 app.delete('/api/users/:id', requireAuth('admin'), async (req, res) => {
-  const id = Number(req.params.id);
+  const id = req.params.id;
   const now = new Date().toISOString();
   const { error } = await supabase.from('users').update({ active: false, updated_at: now }).eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
+  await logActivity(req, 'deactivate_user', { target_id: id });
   res.json({ success: true });
 });
 
@@ -614,7 +590,7 @@ app.post('/api/webhooks', requireAuth('manager'), async (req, res) => {
 });
 
 app.put('/api/webhooks/:id', requireAuth('manager'), async (req, res) => {
-  const id = Number(req.params.id);
+  const id = req.params.id;
   const { name, url, events, secret, active } = req.body;
   const updates = {};
   if (name !== undefined) updates.name = name;
@@ -631,7 +607,7 @@ app.put('/api/webhooks/:id', requireAuth('manager'), async (req, res) => {
 });
 
 app.delete('/api/webhooks/:id', requireAuth('manager'), async (req, res) => {
-  const id = Number(req.params.id);
+  const id = req.params.id;
   const { error } = await supabase.from('webhooks').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
@@ -643,14 +619,14 @@ app.get('/api/webhooks/logs', requireAuth('manager'), async (req, res) => {
   res.json(data || []);
 });
 
-// ─── Staff ────────────────────────────────────────────────────────────────────
+// ─── Staff (uses users table) ─────────────────────────────────────────────────
 
 function parseStaffRow(row) {
   return {
     id: row.id,
     full_name: row.full_name,
     email: row.email,
-    role: row.role || 'manager',
+    role: row.role || 'viewer',
     active: row.active !== false,
     created_at: row.created_at,
     updated_at: row.updated_at
@@ -658,7 +634,7 @@ function parseStaffRow(row) {
 }
 
 app.get('/api/staff', async (req, res) => {
-  const { data, error } = await supabase.from('staff').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('users').select('id, full_name, email, role, active, created_at, updated_at').order('created_at', { ascending: false });
   if (error) {
     return res.status(500).json({ error: error.message });
   }
@@ -667,20 +643,31 @@ app.get('/api/staff', async (req, res) => {
 });
 
 app.post('/api/staff', requireAuth('manager'), async (req, res) => {
-  const { full_name, email, role } = req.body;
+  const { full_name, email, role, password } = req.body;
   if (!full_name || !email) {
     return res.status(400).json({ error: 'Nama dan emel diperlukan.' });
   }
+  if (!password || password.trim().length < 6) {
+    return res.status(400).json({ error: 'Kata laluan mesti sekurang-kurangnya 6 aksara.' });
+  }
+
+  const { data: existing } = await supabase.from('users').select('id').eq('email', email).maybeSingle();
+  if (existing) {
+    return res.status(400).json({ error: 'Emel sudah digunakan.' });
+  }
 
   const now = new Date().toISOString();
-  const { data, error } = await supabase.from('staff').insert([{
+  const password_hash = hashPassword(password.trim());
+
+  const { data, error } = await supabase.from('users').insert([{
     full_name,
     email,
-    role: role || 'manager',
+    password_hash,
+    role: role || 'viewer',
     active: true,
     created_at: now,
     updated_at: now
-  }]).select('*').single();
+  }]).select('id, full_name, email, role, active, created_at, updated_at').single();
 
   if (error) {
     return res.status(500).json({ error: error.message });
@@ -689,261 +676,266 @@ app.post('/api/staff', requireAuth('manager'), async (req, res) => {
   res.json(parseStaffRow(data));
 });
 
+app.delete('/api/staff/:id', requireAuth('manager'), async (req, res) => {
+  const id = req.params.id;
+  const now = new Date().toISOString();
+  const { error } = await supabase.from('users').update({ active: false, updated_at: now }).eq('id', id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+// ─── donor_summary row mapper ─────────────────────────────────────────────────
+
+function parseSummaryRow(row) {
+  // Column names from Supabase donor_summary table
+  const total_orders = Number(row.kekerapan ?? row.total_donations ?? row.donation_count ?? 0);
+  const total_spent = Number(row.jumlah_keseluruhan ?? row.total_amount ?? row.total_spent ?? 0);
+  const first_date = row.tarikh_sumbangan_terdahulu ?? row.first_donation_date ?? null;
+  const last_date = row.tarikh_sumbangan_terkini ?? row.last_donation_date ?? null;
+  const aov = Number(row.aov ?? (total_orders > 0 ? (total_spent / total_orders).toFixed(2) : 0));
+  const ltv = Number(row.ltv ?? total_spent);
+
+  return {
+    id: row.id ?? row.donor_id,
+    full_name: row.nama ?? row.name ?? row.full_name ?? '',
+    phone: row.phone ?? '',
+    email: row.email ?? '',
+    source: row.source ?? '',
+    campaign: row.campaign ?? '',
+    created_at: row.created_at,
+    updated_at: row.updated_at ?? row.created_at,
+    total_orders,
+    total_spent,
+    first_purchase_date: first_date,
+    last_purchase_date: last_date,
+    ltv,
+    aov,
+    highvalue: row.highvalue ?? 'Tidak',
+    status: computeStatus(last_date, total_orders)
+  };
+}
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 app.get('/api/summary', async (req, res) => {
-  const { data: orderRows, error: orderError } = await supabase.from('orders').select('amount, customer_id, order_date');
-  if (orderError) {
-    return res.status(500).json({ error: orderError.message });
+  const { data, error } = await supabase.rpc('get_dashboard_stats');
+  if (error) {
+    // Fallback: function not yet created in Supabase
+    return res.status(500).json({ error: 'Dashboard stats function not found. Run get_dashboard_stats() SQL in Supabase first. ' + error.message });
   }
-
-  const { data: customerRows, error: customerError } = await supabase.from('customers').select('*');
-  if (customerError) {
-    return res.status(500).json({ error: customerError.message });
-  }
-
-  const orderStats = buildOrderStats(orderRows || []);
-  const totals = (orderRows || []).reduce((sum, order) => sum + Number(order.amount || 0), 0);
-  const avgOrderValue = orderRows && orderRows.length ? Number((totals / orderRows.length).toFixed(2)) : 0;
-
-  const summary = {
-    total: customerRows.length,
-    total_collection: Number(totals.toFixed(2)),
-    avg_order_value: avgOrderValue,
-    active: 0,
-    repeat: 0,
-    dormant: 0,
-    churn: 0
-  };
-
-  (customerRows || []).forEach((customer) => {
-    const stats = orderStats[customer.id] || { total_orders: 0, last_purchase_date: null };
-    const status = computeStatus(stats.last_purchase_date, stats.total_orders);
-    summary[status] += 1;
-  });
-
-  res.json(summary);
+  res.json(data);
 });
 
-// ─── Customers ────────────────────────────────────────────────────────────────
+// ─── Donation chart (monthly aggregation) ────────────────────────────────────
+
+app.get('/api/donations/chart', async (req, res) => {
+  const { from_date, to_date } = req.query;
+
+  let countQuery = supabase.from('donations').select('*', { count: 'exact', head: true });
+  if (from_date) countQuery = countQuery.gte('donation_date', from_date);
+  if (to_date) countQuery = countQuery.lte('donation_date', to_date);
+
+  const { count: totalCount, error: countError } = await countQuery;
+  if (countError) return res.status(500).json({ error: countError.message });
+
+  const monthlyTotals = {};
+  const batchSize = 1000;
+
+  for (let offset = 0; offset < (totalCount || 0); offset += batchSize) {
+    let query = supabase
+      .from('donations')
+      .select('donation_date, amount')
+      .order('donation_date', { ascending: true })
+      .range(offset, offset + batchSize - 1);
+
+    if (from_date) query = query.gte('donation_date', from_date);
+    if (to_date) query = query.lte('donation_date', to_date);
+
+    const { data: batch, error: batchError } = await query;
+    if (batchError) return res.status(500).json({ error: batchError.message });
+
+    (batch || []).forEach((d) => {
+      if (!d.donation_date) return;
+      const date = new Date(d.donation_date);
+      const key = date.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+      monthlyTotals[key] = (monthlyTotals[key] || 0) + Number(d.amount || 0);
+    });
+  }
+
+  const entries = Object.entries(monthlyTotals).sort(
+    (a, b) => new Date(a[0]) - new Date(b[0])
+  );
+
+  res.json(entries.map(([label, value]) => ({ label, value })));
+});
+
+// ─── Customers (donors) ───────────────────────────────────────────────────────
 
 app.get('/api/customers', async (req, res) => {
-  const { search, status, source, from_date, to_date } = req.query;
+  const { search, status, source, highvalue, from_date, to_date } = req.query;
   let page = Math.max(1, parseInt(req.query.page, 10) || 1);
   let perPage = Math.min(200, Math.max(1, parseInt(req.query.per_page, 10) || 50));
 
-  const { data: customerRows, error: customerError } = await supabase.from('customers').select('*').order('updated_at', { ascending: false });
-  if (customerError) {
-    return res.status(500).json({ error: customerError.message });
-  }
+  // Build query with filters pushed to Supabase
+  let query = supabase.from('donor_summary').select('*', { count: 'exact' });
 
-  const { data: orderRows, error: orderError } = await supabase.from('orders').select('*');
-  if (orderError) {
-    return res.status(500).json({ error: orderError.message });
-  }
-
-  const orderStats = buildOrderStats(orderRows || []);
-
-  let customers = (customerRows || []).map((row) => {
-    const stats = orderStats[row.id] || { total_orders: 0, total_spent: 0, first_purchase_date: null, last_purchase_date: null };
-    const customerRow = { ...row, ...stats };
-    return {
-      ...parseCustomerRow(customerRow),
-      status: computeStatus(stats.last_purchase_date, stats.total_orders)
-    };
-  });
-
-  // Apply filters
   if (search) {
-    const q = search.toLowerCase();
-    customers = customers.filter((c) =>
-      (c.full_name || '').toLowerCase().includes(q) ||
-      (c.email || '').toLowerCase().includes(q) ||
-      (c.phone || '').toLowerCase().includes(q)
-    );
+    query = query.or(`nama.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
   }
 
+  if (source && source !== 'all') {
+    query = query.eq('source', source);
+  }
+
+  if (highvalue && highvalue !== 'all') {
+    query = query.eq('highvalue', highvalue);
+  }
+
+  if (from_date) {
+    query = query.gte('tarikh_sumbangan_terkini', from_date);
+  }
+
+  if (to_date) {
+    query = query.lte('tarikh_sumbangan_terkini', to_date);
+  }
+
+  // Apply DB-level pagination
+  const rangeStart = (page - 1) * perPage;
+  const rangeEnd = rangeStart + perPage - 1;
+  query = query.range(rangeStart, rangeEnd);
+
+  const { data: summaryRows, count, error: summaryError } = await query;
+  if (summaryError) {
+    return res.status(500).json({ error: summaryError.message });
+  }
+
+  let customers = (summaryRows || []).map(parseSummaryRow);
+
+  // Status filter is computed (not stored), apply client-side on current page
   if (status && status !== 'all') {
     customers = customers.filter((c) => c.status === status);
   }
 
-  if (source && source !== 'all') {
-    customers = customers.filter((c) => (c.source || 'other') === source);
-  }
-
-  if (from_date) {
-    customers = customers.filter((c) => c.last_purchase_date && c.last_purchase_date >= from_date);
-  }
-
-  if (to_date) {
-    customers = customers.filter((c) => c.last_purchase_date && c.last_purchase_date <= to_date);
-  }
-
-  const total = customers.length;
+  const total = count || 0;
   const totalPages = Math.ceil(total / perPage) || 1;
-  page = Math.min(page, totalPages);
-  const start = (page - 1) * perPage;
-  const paged = customers.slice(start, start + perPage);
 
-  res.json({ customers: paged, total, page, per_page: perPage, total_pages: totalPages });
+  res.json({ customers, total, page, per_page: perPage, total_pages: totalPages });
 });
 
 app.get('/api/customers/:id', async (req, res) => {
-  const id = Number(req.params.id);
+  const id = req.params.id;
 
-  const { data: customerRow, error: customerError } = await supabase.from('customers').select('*').eq('id', id).single();
-  if (customerError || !customerRow) {
-    return res.status(404).json({ error: 'Customer not found' });
+  const { data: donorRow, error: donorError } = await supabase.from('donors').select('*').eq('id', id).single();
+  if (donorError || !donorRow) {
+    return res.status(404).json({ error: 'Donor not found' });
   }
 
-  const { data: orders, error: ordersError } = await supabase.from('orders').select('*').eq('customer_id', id).order('order_date', { ascending: false });
-  if (ordersError) {
-    return res.status(500).json({ error: ordersError.message });
+  const { data: donations, error: donationsError } = await supabase.from('donations').select('*').eq('donor_id', id).order('donation_date', { ascending: false });
+  if (donationsError) {
+    return res.status(500).json({ error: donationsError.message });
   }
 
-  const stats = buildOrderStats(orders || [])[id] || { total_orders: 0, total_spent: 0, first_purchase_date: null, last_purchase_date: null };
-  const customer = parseCustomerRow({
-    ...customerRow,
-    ...stats
-  });
+  const stats = buildDonationStats(donations || [])[id] || { total_orders: 0, total_spent: 0, first_purchase_date: null, last_purchase_date: null };
+  const customer = parseDonorRow({ ...donorRow, ...stats });
   customer.status = computeStatus(stats.last_purchase_date, stats.total_orders);
 
-  res.json({ customer, orders: orders || [] });
+  res.json({
+    customer,
+    orders: (donations || []).map((d) => ({
+      ...d,
+      order_date: d.donation_date,
+      customer_id: d.donor_id,
+      campaign_name: d.campaign_name || null
+    }))
+  });
 });
 
 app.put('/api/customers/:id', requireAuth('editor'), async (req, res) => {
-  const id = Number(req.params.id);
-  const { full_name, phone, email, source, campaign } = req.body;
+  const id = req.params.id;
+  const { full_name, phone, email } = req.body;
 
   if (!full_name) {
     return res.status(400).json({ error: 'full_name is required' });
   }
 
-  const { data: existing, error: existingError } = await supabase.from('customers').select('*').eq('id', id).single();
+  const { data: existing, error: existingError } = await supabase.from('donors').select('*').eq('id', id).single();
   if (existingError || !existing) {
-    return res.status(404).json({ error: 'Customer not found' });
+    return res.status(404).json({ error: 'Donor not found' });
   }
 
-  const now = new Date().toISOString();
-  const { error: updateError } = await supabase.from('customers').update({
-    full_name,
-    phone: phone || '',
-    email: email || '',
-    source: source || existing.source || 'manual',
-    campaign: campaign || existing.campaign || '',
-    updated_at: now
+  const { error: updateError } = await supabase.from('donors').update({
+    name: full_name,
+    phone: phone || null,
+    email: email ? email.toLowerCase() : null,
+    updated_at: new Date().toISOString()
   }).eq('id', id);
 
   if (updateError) {
     return res.status(500).json({ error: updateError.message });
   }
 
-  const { data: updated } = await supabase.from('customers').select('*').eq('id', id).single();
-  res.json({ customer: updated });
+  const { data: updated } = await supabase.from('donors').select('*').eq('id', id).single();
+  res.json({ customer: parseDonorRow(updated) });
 });
 
-// ─── Orders ───────────────────────────────────────────────────────────────────
+// ─── Orders (donations) ───────────────────────────────────────────────────────
 
 app.get('/api/orders', async (req, res) => {
-  const { data: orders, error } = await supabase.from('orders').select('*, customer:customers(full_name, phone, email)').order('order_date', { ascending: false });
+  const { data: donations, error } = await supabase.from('donations').select('*').order('donation_date', { ascending: false });
   if (error) {
     return res.status(500).json({ error: error.message });
   }
 
-  res.json((orders || []).map((order) => ({
-    ...order,
-    customer_name: order.customer?.full_name || null,
-    phone: order.customer?.phone || null,
-    email: order.customer?.email || null
+  const donorIds = [...new Set((donations || []).map((d) => d.donor_id).filter(Boolean))];
+  let donorMap = {};
+
+  if (donorIds.length > 0) {
+    const { data: donors } = await supabase.from('donors').select('id, name, phone, email');
+    (donors || []).forEach((d) => { donorMap[d.id] = d; });
+  }
+
+  res.json((donations || []).map((donation) => ({
+    ...donation,
+    order_date: donation.donation_date,
+    customer_id: donation.donor_id,
+    customer_name: donorMap[donation.donor_id]?.name || null,
+    phone: donorMap[donation.donor_id]?.phone || null,
+    email: donorMap[donation.donor_id]?.email || null
   })));
 });
 
 app.post('/api/orders', requireAuth('editor'), async (req, res) => {
-  let { external_order_id, customer, order_date, amount, source } = req.body;
-  if (!order_date || !amount) {
-    return res.status(400).json({ error: 'order_date and amount are required' });
+  const { customer, order_date, donation_date, amount, source, campaign } = req.body;
+  const finalDate = donation_date || order_date;
+  if (!finalDate || !amount) {
+    return res.status(400).json({ error: 'donation_date and amount are required' });
   }
 
-  if (!external_order_id) {
-    external_order_id = `AUTO-${Date.now()}`;
-  }
-
-  const { full_name, phone, email, campaign } = customer || {};
+  const { full_name, phone, email } = customer || {};
   const now = new Date().toISOString();
 
-  let existingCustomer = null;
-  if (phone) {
-    const { data, error } = await supabase.from('customers').select('*').eq('phone', phone).maybeSingle();
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-    existingCustomer = data || null;
-  }
-  if (!existingCustomer && email) {
-    const { data, error } = await supabase.from('customers').select('*').eq('email', email).maybeSingle();
-    if (error) {
-      return res.status(500).json({ error: error.message });
-    }
-    existingCustomer = data || null;
-  }
+  const { donorId, isNew, donor } = await upsertDonor({ name: full_name, phone, email });
 
-  let customerId;
-  let isNewCustomer = false;
+  if (isNew) fireWebhooks('donor.created', donor);
 
-  if (existingCustomer) {
-    customerId = existingCustomer.id;
-    const { error: updateError } = await supabase.from('customers').update({
-      full_name: full_name || existingCustomer.full_name,
-      phone: phone || existingCustomer.phone,
-      email: email || existingCustomer.email,
-      source: source || existingCustomer.source || 'manual',
-      campaign: campaign || existingCustomer.campaign || '',
-      updated_at: now
-    }).eq('id', customerId);
-
-    if (updateError) {
-      return res.status(500).json({ error: updateError.message });
-    }
-  } else {
-    const { data, error: insertError } = await supabase.from('customers').insert([{
-      full_name: full_name || 'Unknown',
-      phone: phone || '',
-      email: email || '',
-      source: source || 'manual',
-      campaign: campaign || '',
-      created_at: now,
-      updated_at: now
-    }]).select('*').single();
-
-    if (insertError) {
-      return res.status(500).json({ error: insertError.message });
-    }
-    customerId = data.id;
-    isNewCustomer = true;
-    fireWebhooks('customer.created', data);
-  }
-
-  const { data: newOrder, error: orderInsertError } = await supabase.from('orders').insert([{
-    external_order_id,
-    customer_id: customerId,
-    order_date,
+  const { data: newDonation, error: donationInsertError } = await supabase.from('donations').insert([{
+    donor_id: donorId,
+    donation_date: finalDate,
     amount: Number(amount),
-    source: source || 'manual',
+    source: source || null,
+    campaign_name: campaign || null,
     created_at: now
   }]).select('*').single();
 
-  if (orderInsertError) {
-    return res.status(500).json({ error: orderInsertError.message });
+  if (donationInsertError) {
+    return res.status(500).json({ error: donationInsertError.message });
   }
 
-  fireWebhooks('order.created', newOrder);
+  fireWebhooks('donation.created', newDonation);
+  await logActivity(req, 'add_donation', { donor: full_name, amount: Number(amount), date: finalDate, new_donor: isNew });
 
-  const { data: detail, error: detailError } = await supabase.from('customers').select('*').eq('id', customerId).single();
-  if (detailError) {
-    return res.status(500).json({ error: detailError.message });
-  }
-
-  res.json({ success: true, customer: detail });
+  const { data: detail } = await supabase.from('donors').select('*').eq('id', donorId).single();
+  res.json({ success: true, customer: detail ? parseDonorRow(detail) : null });
 });
 
 app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
@@ -959,91 +951,577 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 
-  const created = [];
-
-  for (let index = 0; index < records.length; index += 1) {
-    const row = records[index];
-    const lineNumber = index + 2;
-    const amount = Number(row.amount);
-
-    if (!row.full_name || !row.order_date || !row.amount) {
-      return res.status(400).json({ error: `Baris ${lineNumber} mesti mempunyai full_name, order_date dan amount.` });
+  // Validate all rows first
+  for (let i = 0; i < records.length; i++) {
+    const row = records[i];
+    const lineNumber = i + 2;
+    if (!row.name || !row.donation_date || !row.amount) {
+      return res.status(400).json({ error: `Row ${lineNumber} must have name, donation_date and amount.` });
     }
-
-    if (Number.isNaN(amount)) {
-      return res.status(400).json({ error: `Jumlah tidak sah pada baris ${lineNumber}.` });
+    if (Number.isNaN(Number(row.amount))) {
+      return res.status(400).json({ error: `Invalid amount at row ${lineNumber}.` });
     }
-
-    let existingCustomer = null;
-    if (row.phone) {
-      const { data, error } = await supabase.from('customers').select('*').eq('phone', row.phone).maybeSingle();
-      if (error) {
-        return res.status(500).json({ error: error.message });
-      }
-      existingCustomer = data || null;
-    }
-    if (!existingCustomer && row.email) {
-      const { data, error } = await supabase.from('customers').select('*').eq('email', row.email).maybeSingle();
-      if (error) {
-        return res.status(500).json({ error: error.message });
-      }
-      existingCustomer = data || null;
-    }
-
-    const now = new Date().toISOString();
-    let customerId;
-
-    if (existingCustomer) {
-      customerId = existingCustomer.id;
-      const { error } = await supabase.from('customers').update({
-        full_name: row.full_name || existingCustomer.full_name,
-        phone: row.phone || existingCustomer.phone,
-        email: row.email || existingCustomer.email,
-        source: row.source || existingCustomer.source || 'manual',
-        campaign: row.campaign || existingCustomer.campaign || '',
-        updated_at: now
-      }).eq('id', customerId);
-
-      if (error) {
-        return res.status(500).json({ error: error.message });
-      }
-    } else {
-      const { data, error } = await supabase.from('customers').insert([{
-        full_name: row.full_name,
-        phone: row.phone || '',
-        email: row.email || '',
-        source: row.source || 'manual',
-        campaign: row.campaign || '',
-        created_at: now,
-        updated_at: now
-      }]).select('*').single();
-
-      if (error) {
-        return res.status(500).json({ error: error.message });
-      }
-
-      customerId = data.id;
-      fireWebhooks('customer.created', data);
-    }
-
-    const { data: newOrder, error: orderError } = await supabase.from('orders').insert([{
-      external_order_id: `BULK-${Date.now()}-${index + 1}`,
-      customer_id: customerId,
-      order_date: row.order_date,
-      amount,
-      source: row.source || 'manual',
-      created_at: now
-    }]).select('*').single();
-
-    if (orderError) {
-      return res.status(500).json({ error: orderError.message });
-    }
-
-    fireWebhooks('order.created', newOrder);
-    created.push(row);
   }
 
-  res.json({ success: true, imported: created.length });
+  const now = new Date().toISOString();
+  const CHUNK = 300;
+  let imported = 0;
+  let newDonorsCount = 0;
+
+  for (let i = 0; i < records.length; i += CHUNK) {
+    const chunk = records.slice(i, i + CHUNK);
+
+    // Collect unique phones and emails in this chunk
+    const phones = [...new Set(chunk.map((r) => (r.phone || '').trim()).filter(Boolean))];
+    const emails = [...new Set(chunk.map((r) => (r.email || '').trim().toLowerCase()).filter(Boolean))];
+
+    // Lookup only matching donors for this chunk (no full table scan)
+    const phoneMap = {};
+    const emailMap = {};
+    if (phones.length) {
+      const { data } = await supabase.from('donors').select('id, phone').in('phone', phones);
+      (data || []).forEach((d) => { if (d.phone) phoneMap[d.phone.trim()] = d.id; });
+    }
+    if (emails.length) {
+      const { data } = await supabase.from('donors').select('id, email').in('email', emails);
+      (data || []).forEach((d) => { if (d.email) emailMap[d.email.trim().toLowerCase()] = d.id; });
+    }
+
+    // Resolve donor IDs, collect new donors for this chunk
+    const newDonors = [];
+    const chunkDonorKeys = [];
+
+    for (const row of chunk) {
+      const phone = (row.phone || '').trim();
+      const email = (row.email || '').trim().toLowerCase();
+      const existingId = (phone && phoneMap[phone]) || (email && emailMap[email]);
+
+      if (existingId && typeof existingId !== 'number') {
+        chunkDonorKeys.push({ type: 'existing', id: existingId });
+      } else {
+        const pendingIdx = (phone && typeof phoneMap[phone] === 'number' ? phoneMap[phone] : null)
+          ?? (email && typeof emailMap[email] === 'number' ? emailMap[email] : null);
+        if (pendingIdx !== null) {
+          chunkDonorKeys.push({ type: 'new', idx: pendingIdx });
+        } else {
+          const idx = newDonors.length;
+          newDonors.push({ name: row.name || 'Unknown', phone: phone || null, email: email || null });
+          chunkDonorKeys.push({ type: 'new', idx });
+          if (phone) phoneMap[phone] = idx;
+          if (email) emailMap[email] = idx;
+        }
+      }
+    }
+
+    // Insert new donors — on UNIQUE conflict (duplicate phone/email), ignore and re-fetch
+    let insertedDonors = [];
+    if (newDonors.length > 0) {
+      const { data, error } = await supabase.from('donors').insert(newDonors).select('id, phone, email');
+      if (error && error.code !== '23505') {
+        return res.status(500).json({ error: `Insert donors: ${error.message}` });
+      }
+      if (error?.code === '23505') {
+        // Conflict — re-fetch all by phone/email to get their IDs
+        const allPhones = newDonors.map((d) => d.phone).filter(Boolean);
+        const allEmails = newDonors.map((d) => d.email).filter(Boolean);
+        const refetched = [];
+        if (allPhones.length) {
+          const { data: byPhone } = await supabase.from('donors').select('id, phone, email').in('phone', allPhones);
+          refetched.push(...(byPhone || []));
+        }
+        if (allEmails.length) {
+          const { data: byEmail } = await supabase.from('donors').select('id, phone, email').in('email', allEmails);
+          refetched.push(...(byEmail || []));
+        }
+        insertedDonors = refetched;
+        refetched.forEach((d) => {
+          if (d.phone) phoneMap[d.phone] = d.id;
+          if (d.email) emailMap[d.email] = d.id;
+        });
+        // Re-map chunkDonorKeys to use fetched IDs
+        chunkDonorKeys.forEach((k, i) => {
+          if (k.type === 'new') {
+            const nd = newDonors[k.idx];
+            const resolvedId = (nd.phone && phoneMap[nd.phone] && typeof phoneMap[nd.phone] !== 'number' ? phoneMap[nd.phone] : null)
+              ?? (nd.email && emailMap[nd.email] && typeof emailMap[nd.email] !== 'number' ? emailMap[nd.email] : null);
+            if (resolvedId) chunkDonorKeys[i] = { type: 'existing', id: resolvedId };
+          }
+        });
+      } else {
+        insertedDonors = data || [];
+      newDonorsCount += insertedDonors.length;
+      }
+    }
+
+    // Build donor IDs and insert donations
+    const donationRows = chunk.map((row, j) => {
+      const key = chunkDonorKeys[j];
+      const donorId = key.type === 'existing' ? key.id : (insertedDonors[key.idx]?.id ?? null);
+      return {
+        donor_id: donorId,
+        donation_date: row.donation_date,
+        amount: Number(row.amount),
+        source: row.source || null,
+        campaign_name: row.campaign || null,
+        created_at: now
+      };
+    }).filter((r) => r.donor_id);
+
+    if (donationRows.length > 0) {
+      const { error } = await supabase.from('donations').insert(donationRows);
+      if (error) return res.status(500).json({ error: `Insert donations: ${error.message}` });
+    }
+
+    imported += donationRows.length;
+  }
+
+  await logActivity(req, 'bulk_upload', { imported, new_donors: newDonorsCount, total_records: records.length });
+  res.json({ success: true, imported, new_donors: newDonorsCount });
+});
+
+// ─── Donor notes ─────────────────────────────────────────────────────────────
+
+app.get('/api/customers/:id/notes', async (req, res) => {
+  const { data, error } = await supabase.from('donor_notes')
+    .select('*').eq('donor_id', req.params.id).order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+app.post('/api/customers/:id/notes', requireAuth('editor'), async (req, res) => {
+  const { content } = req.body;
+  if (!content?.trim()) return res.status(400).json({ error: 'Content is required.' });
+  const { data, error } = await supabase.from('donor_notes').insert([{
+    donor_id: req.params.id,
+    content: content.trim(),
+    created_by: req.user.full_name || req.user.email || 'staff',
+    created_at: new Date().toISOString()
+  }]).select('*').single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.delete('/api/customers/:id/notes/:noteId', requireAuth('editor'), async (req, res) => {
+  const { error } = await supabase.from('donor_notes')
+    .delete().eq('id', req.params.noteId).eq('donor_id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+// ─── Duplicate detection & merge ──────────────────────────────────────────────
+
+app.get('/api/donors/duplicates', requireAuth('manager'), async (req, res) => {
+  const { data: donors, error } = await supabase
+    .from('donors').select('id, name, phone, email, created_at').limit(5000);
+  if (error) return res.status(500).json({ error: error.message });
+
+  const pairs = [];
+  const seen = new Set();
+
+  const addPair = (a, b, reason) => {
+    const key = [a.id, b.id].sort().join(':');
+    if (!seen.has(key)) { seen.add(key); pairs.push({ donor_a: a, donor_b: b, reason }); }
+  };
+
+  const phoneGroups = {};
+  const emailGroups = {};
+  const nameGroups = {};
+
+  donors.forEach((d) => {
+    if (d.phone?.trim()) {
+      const k = d.phone.trim().replace(/\D/g, '');
+      if (k.length >= 7) { if (!phoneGroups[k]) phoneGroups[k] = []; phoneGroups[k].push(d); }
+    }
+    if (d.email?.trim()) {
+      const k = d.email.trim().toLowerCase();
+      if (!emailGroups[k]) emailGroups[k] = []; emailGroups[k].push(d);
+    }
+    if (d.name?.trim()) {
+      const k = d.name.trim().toLowerCase();
+      if (!nameGroups[k]) nameGroups[k] = []; nameGroups[k].push(d);
+    }
+  });
+
+  for (const group of Object.values(phoneGroups)) {
+    for (let i = 0; i < group.length; i++) for (let j = i + 1; j < group.length; j++) addPair(group[i], group[j], 'Same phone');
+  }
+  for (const group of Object.values(emailGroups)) {
+    for (let i = 0; i < group.length; i++) for (let j = i + 1; j < group.length; j++) addPair(group[i], group[j], 'Same email');
+  }
+  for (const group of Object.values(nameGroups)) {
+    if (group.length >= 2 && group.length <= 10) {
+      for (let i = 0; i < group.length; i++) for (let j = i + 1; j < group.length; j++) addPair(group[i], group[j], 'Same name');
+    }
+  }
+
+  const allIds = [...new Set(pairs.flatMap((p) => [p.donor_a.id, p.donor_b.id]))];
+  const donationCounts = {};
+  if (allIds.length > 0) {
+    const { data: donations } = await supabase.from('donations').select('donor_id').in('donor_id', allIds);
+    (donations || []).forEach((d) => { donationCounts[d.donor_id] = (donationCounts[d.donor_id] || 0) + 1; });
+  }
+
+  res.json(pairs.slice(0, 200).map((p) => ({
+    ...p,
+    donor_a: { ...p.donor_a, full_name: p.donor_a.name, donation_count: donationCounts[p.donor_a.id] || 0 },
+    donor_b: { ...p.donor_b, full_name: p.donor_b.name, donation_count: donationCounts[p.donor_b.id] || 0 },
+  })));
+});
+
+app.post('/api/donors/merge', requireAuth('manager'), async (req, res) => {
+  const { keep_id, delete_id } = req.body;
+  if (!keep_id || !delete_id) return res.status(400).json({ error: 'keep_id and delete_id required.' });
+  if (keep_id === delete_id) return res.status(400).json({ error: 'Cannot merge a donor with itself.' });
+
+  const { error: donErr } = await supabase.from('donations').update({ donor_id: keep_id }).eq('donor_id', delete_id);
+  if (donErr) return res.status(500).json({ error: donErr.message });
+
+  await supabase.from('donor_notes').update({ donor_id: keep_id }).eq('donor_id', delete_id).catch(() => {});
+
+  const { error: delErr } = await supabase.from('donors').delete().eq('id', delete_id);
+  if (delErr) return res.status(500).json({ error: delErr.message });
+
+  await logActivity(req, 'merge_donors', { keep_id, delete_id });
+  res.json({ success: true });
+});
+
+// ─── Activity Logs ────────────────────────────────────────────────────────────
+
+app.get('/api/activity-logs', requireAuth('manager'), async (req, res) => {
+  const { page = 1, per_page = 50, action } = req.query;
+  const from = (Number(page) - 1) * Number(per_page);
+  const to   = from + Number(per_page) - 1;
+
+  let query = supabase.from('activity_logs').select('*', { count: 'exact' }).order('created_at', { ascending: false }).range(from, to);
+  if (action && action !== 'all') query = query.eq('action', action);
+
+  const { data, error, count } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ logs: data || [], total: count || 0, page: Number(page), per_page: Number(per_page) });
+});
+
+// ─── Top donors ──────────────────────────────────────────────────────────────
+
+app.get('/api/top-donors', async (req, res) => {
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 10));
+  const campaign = req.query.campaign || '';
+
+  if (campaign) {
+    const { data: donations, error } = await supabase
+      .from('donations').select('donor_id, amount').eq('campaign_name', campaign).limit(10000);
+    if (error) return res.status(500).json({ error: error.message });
+
+    const totals = {};
+    const counts = {};
+    (donations || []).forEach((d) => {
+      if (!d.donor_id) return;
+      totals[d.donor_id] = (totals[d.donor_id] || 0) + Number(d.amount || 0);
+      counts[d.donor_id] = (counts[d.donor_id] || 0) + 1;
+    });
+
+    const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, limit);
+    if (sorted.length === 0) return res.json([]);
+
+    const ids = sorted.map(([id]) => id);
+    const { data: donors } = await supabase.from('donors').select('id, name, email').in('id', ids);
+    const donorMap = {};
+    (donors || []).forEach((d) => { donorMap[d.id] = d; });
+
+    return res.json(sorted.map(([id, total], i) => ({
+      rank: i + 1,
+      donor_id: id,
+      full_name: donorMap[id]?.name || 'Unknown',
+      email: donorMap[id]?.email || '',
+      total_spent: Number(total.toFixed(2)),
+      total_orders: counts[id] || 0,
+    })));
+  }
+
+  const { data, error } = await supabase
+    .from('donor_summary')
+    .select('id, nama, email, jumlah_keseluruhan, kekerapan')
+    .order('jumlah_keseluruhan', { ascending: false })
+    .limit(limit);
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json((data || []).map((row, i) => ({
+    rank: i + 1,
+    donor_id: row.id,
+    full_name: row.nama || '',
+    email: row.email || '',
+    total_spent: Number(row.jumlah_keseluruhan || 0),
+    total_orders: Number(row.kekerapan || 0),
+  })));
+});
+
+// ─── Campaign list ────────────────────────────────────────────────────────────
+
+app.get('/api/campaigns', async (req, res) => {
+  const batchSize = 1000;
+  let from = 0;
+  const allNames = new Set();
+  while (true) {
+    const { data: batch, error } = await supabase
+      .from('donations').select('campaign_name')
+      .not('campaign_name', 'is', null).neq('campaign_name', '')
+      .range(from, from + batchSize - 1);
+    if (error) return res.status(500).json({ error: error.message });
+    (batch || []).forEach((d) => allNames.add(d.campaign_name));
+    if (!batch || batch.length < batchSize) break;
+    from += batchSize;
+  }
+  res.json([...allNames].sort());
+});
+
+// ─── Campaign chart ───────────────────────────────────────────────────────────
+
+app.get('/api/donations/campaign-chart', async (req, res) => {
+  const { from_date, to_date } = req.query;
+  const batchSize = 1000;
+  let offset = 0;
+  const totals = {};
+  const counts = {};
+
+  while (true) {
+    let query = supabase.from('donations').select('campaign_name, amount')
+      .range(offset, offset + batchSize - 1);
+    if (from_date) query = query.gte('donation_date', from_date);
+    if (to_date) query = query.lte('donation_date', to_date);
+
+    const { data: batch, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+
+    (batch || []).forEach((d) => {
+      const key = d.campaign_name || 'Uncategorized';
+      totals[key] = (totals[key] || 0) + Number(d.amount || 0);
+      counts[key] = (counts[key] || 0) + 1;
+    });
+
+    if (!batch || batch.length < batchSize) break;
+    offset += batchSize;
+  }
+
+  res.json(
+    Object.entries(totals)
+      .sort((a, b) => b[1] - a[1])
+      .map(([campaign, total]) => ({ campaign, total: Number(total.toFixed(2)), count: counts[campaign] || 0 }))
+  );
+});
+
+// ─── Monthly report ───────────────────────────────────────────────────────────
+
+app.get('/api/reports/monthly', async (req, res) => {
+  const now = new Date();
+  const rawMonth = req.query.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [year, mon] = rawMonth.split('-').map(Number);
+
+  const fromDate = `${year}-${String(mon).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, mon, 0).getDate();
+  const toDate = `${year}-${String(mon).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  const batchSize = 1000;
+  let offset = 0;
+  let allDonations = [];
+  while (true) {
+    const { data: batch, error } = await supabase
+      .from('donations').select('donor_id, amount, campaign_name')
+      .gte('donation_date', fromDate).lte('donation_date', toDate)
+      .range(offset, offset + batchSize - 1);
+    if (error) return res.status(500).json({ error: error.message });
+    allDonations = allDonations.concat(batch || []);
+    if (!batch || batch.length < batchSize) break;
+    offset += batchSize;
+  }
+  const donations = allDonations;
+
+  const totalCollection = donations.reduce((s, d) => s + Number(d.amount || 0), 0);
+  const totalTransactions = donations.length;
+  const uniqueDonorIds = [...new Set(donations.map((d) => d.donor_id).filter(Boolean))];
+  const uniqueDonors = uniqueDonorIds.length;
+
+  const campaignMap = {};
+  donations.forEach((d) => {
+    const key = d.campaign_name || 'Uncategorized';
+    if (!campaignMap[key]) campaignMap[key] = { total: 0, count: 0 };
+    campaignMap[key].total += Number(d.amount || 0);
+    campaignMap[key].count += 1;
+  });
+  const campaigns = Object.entries(campaignMap)
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([name, s]) => ({ name, total: Number(s.total.toFixed(2)), count: s.count }));
+
+  // Count new donors using tarikh_sumbangan_terdahulu (first donation date) from donor_summary
+  // to correctly handle bulk-uploaded historical data where created_at is the upload date
+  let newDonors = 0;
+  const chunkSize = 500;
+  for (let i = 0; i < uniqueDonorIds.length; i += chunkSize) {
+    const chunk = uniqueDonorIds.slice(i, i + chunkSize);
+    const { data: summaryRows } = await supabase
+      .from('donor_summary').select('id, tarikh_sumbangan_terdahulu')
+      .in('id', chunk);
+    (summaryRows || []).forEach((row) => {
+      const firstDate = row.tarikh_sumbangan_terdahulu;
+      if (firstDate && firstDate >= fromDate && firstDate <= toDate) newDonors++;
+    });
+  }
+
+  res.json({
+    month: rawMonth,
+    from_date: fromDate,
+    to_date: toDate,
+    total_collection: Number(totalCollection.toFixed(2)),
+    total_transactions: totalTransactions,
+    unique_donors: uniqueDonors,
+    new_donors: newDonors || 0,
+    avg_donation: totalTransactions > 0 ? Number((totalCollection / totalTransactions).toFixed(2)) : 0,
+    campaigns,
+  });
+});
+
+// ─── Chart endpoints ──────────────────────────────────────────────────────────
+
+app.get('/api/charts/donor-growth', async (req, res) => {
+  const months = parseInt(req.query.months || '12', 10);
+  const rows = [];
+  const now = new Date();
+  let cumulative = 0;
+
+  const windowStart = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
+  const windowStartStr = windowStart.toISOString().slice(0, 10);
+  const { count: baseCumulative } = await supabase
+    .from('donors').select('*', { count: 'exact', head: true })
+    .lt('created_at', `${windowStartStr}T00:00:00`);
+  cumulative = baseCumulative || 0;
+
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const year = d.getFullYear();
+    const mon = String(d.getMonth() + 1).padStart(2, '0');
+    const from = `${year}-${mon}-01T00:00:00`;
+    const lastDay = new Date(year, d.getMonth() + 1, 0).getDate();
+    const to = `${year}-${mon}-${String(lastDay).padStart(2, '0')}T23:59:59`;
+    const { count } = await supabase.from('donors').select('*', { count: 'exact', head: true })
+      .gte('created_at', from).lte('created_at', to);
+    const newCount = count || 0;
+    cumulative += newCount;
+    rows.push({ month: `${year}-${mon}`, new_donors: newCount, cumulative });
+  }
+  res.json(rows);
+});
+
+app.get('/api/charts/new-vs-returning', async (req, res) => {
+  const months = parseInt(req.query.months || '12', 10);
+  const rows = [];
+  const now = new Date();
+
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const year = d.getFullYear();
+    const mon = String(d.getMonth() + 1).padStart(2, '0');
+    const from = `${year}-${mon}-01`;
+    const lastDay = new Date(year, d.getMonth() + 1, 0).getDate();
+    const to = `${year}-${mon}-${String(lastDay).padStart(2, '0')}`;
+
+    // Paginate donations for this month to get all donor_ids
+    const batchSize = 1000;
+    let offset = 0;
+    const donorIdSet = new Set();
+    while (true) {
+      const { data: batch } = await supabase
+        .from('donations').select('donor_id')
+        .gte('donation_date', from).lte('donation_date', to)
+        .range(offset, offset + batchSize - 1);
+      (batch || []).forEach(r => { if (r.donor_id) donorIdSet.add(r.donor_id); });
+      if (!batch || batch.length < batchSize) break;
+      offset += batchSize;
+    }
+    const donorIds = [...donorIdSet];
+
+    // Check donor_summary.tarikh_sumbangan_terdahulu (first donation date) to correctly
+    // classify new vs returning — created_at is the upload date for bulk-imported data
+    let newCount = 0;
+    const chunkSize = 500;
+    for (let j = 0; j < donorIds.length; j += chunkSize) {
+      const chunk = donorIds.slice(j, j + chunkSize);
+      const { data: summaryRows } = await supabase
+        .from('donor_summary').select('id, tarikh_sumbangan_terdahulu')
+        .in('id', chunk);
+      (summaryRows || []).forEach((row) => {
+        const firstDate = row.tarikh_sumbangan_terdahulu;
+        if (firstDate && firstDate >= from && firstDate <= to) newCount++;
+      });
+    }
+    const returningCount = Math.max(0, donorIds.length - newCount);
+    rows.push({ month: `${year}-${mon}`, new: newCount, returning: returningCount });
+  }
+  res.json(rows);
+});
+
+app.get('/api/charts/source-breakdown', async (req, res) => {
+  const batchSize = 1000;
+  let offset = 0;
+  const map = {};
+
+  while (true) {
+    const { data: batch, error } = await supabase
+      .from('donations').select('source, amount')
+      .range(offset, offset + batchSize - 1);
+    if (error) return res.status(500).json({ error: error.message });
+
+    (batch || []).forEach(d => {
+      const key = (d.source || 'Unknown').trim() || 'Unknown';
+      if (!map[key]) map[key] = { count: 0, total: 0 };
+      map[key].count += 1;
+      map[key].total += Number(d.amount || 0);
+    });
+
+    if (!batch || batch.length < batchSize) break;
+    offset += batchSize;
+  }
+
+  const rows = Object.entries(map)
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([source, v]) => ({ source, count: v.count, total: Number(v.total.toFixed(2)) }));
+  res.json(rows);
+});
+
+app.get('/api/charts/yoy-comparison', async (req, res) => {
+  const yearMonthTotals = {};
+  const batchSize = 1000;
+  let from = 0;
+
+  while (true) {
+    const { data: batch, error } = await supabase
+      .from('donations')
+      .select('donation_date, amount')
+      .not('donation_date', 'is', null)
+      .order('donation_date', { ascending: true })
+      .range(from, from + batchSize - 1);
+
+    if (error) return res.status(500).json({ error: error.message });
+    if (!batch || batch.length === 0) break;
+
+    for (const d of batch) {
+      if (!d.donation_date) continue;
+      const year = parseInt(d.donation_date.slice(0, 4), 10);
+      const month = parseInt(d.donation_date.slice(5, 7), 10) - 1;
+      if (isNaN(year) || isNaN(month) || month < 0 || month > 11) continue;
+      if (!yearMonthTotals[year]) yearMonthTotals[year] = new Array(12).fill(0);
+      yearMonthTotals[year][month] += Number(d.amount || 0);
+    }
+
+    if (batch.length < batchSize) break;
+    from += batchSize;
+  }
+
+  const years = Object.keys(yearMonthTotals).map(Number).sort();
+  const data = Array.from({ length: 12 }, (_, i) => {
+    const entry = { month: String(i + 1).padStart(2, '0') };
+    for (const year of years) entry[year] = Number((yearMonthTotals[year]?.[i] || 0).toFixed(2));
+    return entry;
+  });
+
+  res.json({ years, data });
 });
 
 // ─── Chart: Donor Growth (new donors per month + cumulative) ─────────────────
