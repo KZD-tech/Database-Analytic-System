@@ -47,9 +47,9 @@ function todayMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-const CSV_HEADERS = ['platform', 'campaign', 'cost_date', 'amount', 'notes'];
+const CSV_HEADERS = ['platform', 'campaign', 'date_from', 'date_to', 'amount', 'notes'];
 
-const initialForm = { platform: 'facebook', campaign: '', cost_date: '', amount: '', notes: '' };
+const initialForm = { platform: 'facebook', campaign: '', cost_date: '', date_to: '', amount: '', notes: '' };
 
 export default function MarketingCosts() {
   const [costs, setCosts] = useState([]);
@@ -143,11 +143,14 @@ export default function MarketingCosts() {
     e.preventDefault();
     setFormError('');
     if (!form.platform || !form.campaign.trim() || !form.cost_date || !form.amount) {
-      return setFormError('All fields are required.');
+      return setFormError('Platform, campaign, start date, and amount are required.');
+    }
+    if (form.date_to && form.date_to < form.cost_date) {
+      return setFormError('End date cannot be before start date.');
     }
     setSaving(true);
     try {
-      await createMarketingCost({ ...form, amount: Number(form.amount) });
+      await createMarketingCost({ ...form, amount: Number(form.amount), date_to: form.date_to || null });
       setForm(initialForm);
       setShowForm(false);
       fetchCosts();
@@ -180,18 +183,26 @@ export default function MarketingCosts() {
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
     const header = parseCsvLine(lines[0]).map((v) => v.trim().toLowerCase());
-    if (CSV_HEADERS.some((h, i) => header[i] !== h)) {
+    // Accept both new (date_from/date_to) and legacy (cost_date) formats
+    const isLegacy = header[2] === 'cost_date';
+    const expectedNew = CSV_HEADERS;
+    const expectedLegacy = ['platform', 'campaign', 'cost_date', 'amount', 'notes'];
+    const expected = isLegacy ? expectedLegacy : expectedNew;
+    if (expected.some((h, i) => header[i] !== h)) {
       throw new Error(`CSV headers must be: ${CSV_HEADERS.join(', ')}`);
     }
     return lines.slice(1).map((line, idx) => {
       const row = parseCsvLine(line);
       if (row.length < 4) throw new Error(`Row ${idx + 2}: insufficient columns.`);
+      if (isLegacy) {
+        return { platform: row[0]?.trim() ?? '', campaign: row[1]?.trim() ?? '', date_from: row[2]?.trim() ?? '', date_to: '', amount: row[3]?.trim() ?? '', notes: row[4]?.trim() ?? '' };
+      }
       return CSV_HEADERS.reduce((acc, h, i) => { acc[h] = row[i]?.trim() ?? ''; return acc; }, {});
     });
   };
 
   const downloadTemplate = () => {
-    const example = [['facebook', 'Ramadan 2024', '2024-03-15', '500.00', 'FB Ads March']];
+    const example = [['facebook', 'Ramadan 2024', '2024-03-10', '2024-03-16', '500.00', 'FB Ads Week 2']];
     const csv = [CSV_HEADERS.join(','), ...example.map((r) => r.map((v) => `"${v}"`).join(','))].join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     const a = document.createElement('a'); a.href = url; a.download = 'marketing-costs-template.csv';
@@ -454,10 +465,11 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
           </div>
           {/* Format hint */}
           <div className="mb-4 rounded-xl bg-slate-50 p-3 text-xs font-mono text-slate-500">
-            <p className="font-semibold text-slate-700 not-italic mb-1">Format CSV:</p>
-            <p>platform,campaign,cost_date,amount,notes</p>
-            <p className="text-slate-400">facebook,Ramadan 2024,2024-03-15,500.00,FB Ads</p>
-            <p className="text-slate-400 mt-1">Platform: {PLATFORMS.join(', ')}</p>
+            <p className="font-semibold text-slate-700 not-italic mb-1">CSV Format (date range per row):</p>
+            <p>platform,campaign,date_from,date_to,amount,notes</p>
+            <p className="text-slate-400">facebook,Ramadan 2024,2024-03-10,2024-03-16,500.00,Week 2</p>
+            <p className="text-slate-400 mt-1 not-italic">• <span className="font-semibold text-slate-600">date_from</span> = start of period &nbsp;•&nbsp; <span className="font-semibold text-slate-600">date_to</span> = end of period (leave blank for single day)</p>
+            <p className="text-slate-400 mt-0.5 not-italic">• Platform: {PLATFORMS.join(', ')}</p>
           </div>
           {/* Drop zone */}
           <div
@@ -501,7 +513,7 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
           {formError && (
             <div className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">{formError}</div>
           )}
-          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">Platform</label>
               <select name="platform" value={form.platform} onChange={handleChange}
@@ -517,21 +529,57 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date</label>
-              <input type="date" name="cost_date" value={form.cost_date} onChange={handleChange}
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Start Date</label>
+              <div className="flex flex-col gap-1.5">
+                <input type="date" name="cost_date" value={form.cost_date} onChange={handleChange}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
+                <div className="flex gap-1.5">
+                  {[
+                    { label: 'This week', fn: () => {
+                      const d = new Date(); const day = d.getDay(); const diff = day === 0 ? -6 : 1 - day;
+                      const mon = new Date(d); mon.setDate(d.getDate() + diff);
+                      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+                      const fmt2 = (x) => x.toISOString().slice(0, 10);
+                      setForm((f) => ({ ...f, cost_date: fmt2(mon), date_to: fmt2(sun) }));
+                    }},
+                    { label: 'Last week', fn: () => {
+                      const d = new Date(); const day = d.getDay(); const diff = day === 0 ? -6 : 1 - day;
+                      const mon = new Date(d); mon.setDate(d.getDate() + diff - 7);
+                      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+                      const fmt2 = (x) => x.toISOString().slice(0, 10);
+                      setForm((f) => ({ ...f, cost_date: fmt2(mon), date_to: fmt2(sun) }));
+                    }},
+                  ].map(({ label, fn }) => (
+                    <button key={label} type="button" onClick={fn}
+                      className="flex-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition">
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">End Date <span className="font-normal text-slate-400">(optional)</span></label>
+              <input type="date" name="date_to" value={form.date_to} onChange={handleChange}
+                min={form.cost_date || undefined}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
+              {form.cost_date && form.date_to && form.date_to >= form.cost_date && (
+                <p className="text-xs text-slate-400 mt-1">
+                  {Math.round((new Date(form.date_to) - new Date(form.cost_date)) / 86400000) + 1} day(s)
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">Amount (RM)</label>
               <input type="number" step="0.01" min="0" name="amount" value={form.amount} onChange={handleChange} placeholder="0.00"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
             </div>
-            <div className="sm:col-span-2 lg:col-span-2">
+            <div className="sm:col-span-2 lg:col-span-3">
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">Notes (optional)</label>
               <input name="notes" value={form.notes} onChange={handleChange} placeholder="Any additional notes..."
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
             </div>
-            <div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-2">
+            <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2">
               <button type="button" onClick={() => { setShowForm(false); setForm(initialForm); setFormError(''); }}
                 className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
               <button type="submit" disabled={saving}
@@ -648,7 +696,11 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
                 <tr><td colSpan="7" className="px-5 py-10 text-center text-slate-400">No cost records. Click "Add Cost" to get started.</td></tr>
               ) : costs.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50 transition">
-                  <td className="px-5 py-3.5 whitespace-nowrap text-slate-500">{c.cost_date}</td>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-slate-500">
+                    {c.date_to && c.date_to !== c.cost_date
+                      ? <span>{c.cost_date} <span className="text-slate-300 mx-0.5">→</span> {c.date_to}</span>
+                      : c.cost_date}
+                  </td>
                   <td className="px-5 py-3.5">
                     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${PLATFORM_COLORS[c.platform] || PLATFORM_COLORS.other}`}>
                       {PLATFORM_LABELS[c.platform] || c.platform}

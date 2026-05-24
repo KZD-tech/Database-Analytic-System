@@ -1548,7 +1548,7 @@ app.get('/api/marketing-costs', requireAuth('manager'), async (req, res) => {
 });
 
 app.post('/api/marketing-costs', requireAuth('manager'), async (req, res) => {
-  const { platform, campaign, cost_date, amount, notes } = req.body;
+  const { platform, campaign, cost_date, date_to, amount, notes } = req.body;
   if (!platform || !campaign || !cost_date || amount == null) {
     return res.status(400).json({ error: 'platform, campaign, cost_date, and amount are required.' });
   }
@@ -1556,12 +1556,13 @@ app.post('/api/marketing-costs', requireAuth('manager'), async (req, res) => {
     platform,
     campaign: campaign.trim(),
     cost_date,
+    date_to: date_to || null,
     amount: Number(amount),
     notes: notes || null,
     created_by: req.user?.email || null,
   }]).select().single();
   if (error) return res.status(500).json({ error: error.message });
-  await logActivity(req, 'add_marketing_cost', { platform, campaign, cost_date, amount: Number(amount) });
+  await logActivity(req, 'add_marketing_cost', { platform, campaign, cost_date, date_to: date_to || null, amount: Number(amount) });
   res.json({ success: true, cost: data });
 });
 
@@ -1583,15 +1584,17 @@ app.post('/api/marketing-costs/bulk', requireAuth('manager'), async (req, res) =
     const r = rows[i];
     const platform = (r.platform || '').trim().toLowerCase().replace(/\s+/g, '_');
     const campaign = (r.campaign || '').trim();
-    const cost_date = (r.cost_date || '').trim();
+    const cost_date = (r.date_from || r.cost_date || '').trim();
+    const date_to   = (r.date_to || '').trim() || null;
     const amount = Number(r.amount);
     if (!campaign || !cost_date || isNaN(amount) || amount < 0) {
-      return res.status(400).json({ error: `Row ${i + 2}: campaign, cost_date, and valid amount required.` });
+      return res.status(400).json({ error: `Row ${i + 2}: campaign, date_from, and valid amount required.` });
     }
     records.push({
       platform: VALID_PLATFORMS.includes(platform) ? platform : 'other',
       campaign,
       cost_date,
+      date_to,
       amount,
       notes: (r.notes || '').trim() || null,
       created_by: req.user?.email || null,
