@@ -131,7 +131,7 @@ export default function MarketingCosts() {
     e.preventDefault();
     setFormError('');
     if (!form.platform || !form.campaign.trim() || !form.cost_date || !form.amount) {
-      return setFormError('Semua field wajib diisi.');
+      return setFormError('All fields are required.');
     }
     setSaving(true);
     try {
@@ -141,7 +141,7 @@ export default function MarketingCosts() {
       fetchCosts();
       fetchRoi();
     } catch (err) {
-      setFormError(err?.response?.data?.error || 'Gagal simpan. Cuba lagi.');
+      setFormError(err?.response?.data?.error || 'Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -166,14 +166,14 @@ export default function MarketingCosts() {
 
   const parseCsv = (text) => {
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    if (lines.length < 2) throw new Error('CSV mesti ada header dan sekurang-kurangnya satu baris data.');
+    if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
     const header = parseCsvLine(lines[0]).map((v) => v.trim().toLowerCase());
     if (CSV_HEADERS.some((h, i) => header[i] !== h)) {
-      throw new Error(`Header CSV mesti: ${CSV_HEADERS.join(', ')}`);
+      throw new Error(`CSV headers must be: ${CSV_HEADERS.join(', ')}`);
     }
     return lines.slice(1).map((line, idx) => {
       const row = parseCsvLine(line);
-      if (row.length < 4) throw new Error(`Baris ${idx + 2}: kurang kolum.`);
+      if (row.length < 4) throw new Error(`Row ${idx + 2}: insufficient columns.`);
       return CSV_HEADERS.reduce((acc, h, i) => { acc[h] = row[i]?.trim() ?? ''; return acc; }, {});
     });
   };
@@ -198,7 +198,7 @@ export default function MarketingCosts() {
       const text = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error('Gagal baca fail.'));
+        reader.onerror = () => reject(new Error('Failed to read file.'));
         reader.readAsText(pendingFile, 'utf-8');
       });
       const rows = parseCsv(String(text));
@@ -208,7 +208,7 @@ export default function MarketingCosts() {
       if (fileInputRef.current) fileInputRef.current.value = '';
       fetchCosts(); fetchRoi();
     } catch (err) {
-      setUploadError(err?.response?.data?.error || err.message || 'Gagal upload.');
+      setUploadError(err?.response?.data?.error || err.message || 'Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -254,11 +254,11 @@ export default function MarketingCosts() {
 <p style="font-size:14px;color:#64748b;margin-bottom:24px;">${monthLabel}</p>
 <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px;">
   <div style="flex:1;min-width:140px;background:#fff0f0;border:1px solid #fecaca;border-radius:10px;padding:14px;">
-    <p style="font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:6px;">Total Kos</p>
+    <p style="font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:6px;">Total Cost</p>
     <p style="font-size:20px;font-weight:700;color:#e11d48;">${fmtRM(totalCostM)}</p>
   </div>
   <div style="flex:1;min-width:140px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px;">
-    <p style="font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:6px;">Total Hasil</p>
+    <p style="font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:6px;">Total Revenue</p>
     <p style="font-size:20px;font-weight:700;color:#059669;">${fmtRM(totalRevM)}</p>
   </div>
   <div style="flex:1;min-width:140px;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:14px;">
@@ -268,12 +268,12 @@ export default function MarketingCosts() {
 </div>
 ${reportRoi.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bottom:10px;">ROI per Campaign</h3>
 <table style="margin-bottom:28px;">
-<thead><tr><th>Campaign</th><th>Platform</th><th style="text-align:right;">Kos</th><th style="text-align:right;">Donation</th><th style="text-align:right;">Net</th><th style="text-align:right;">ROAS</th></tr></thead>
+<thead><tr><th>Campaign</th><th>Platform</th><th style="text-align:right;">Cost</th><th style="text-align:right;">Donation</th><th style="text-align:right;">Net</th><th style="text-align:right;">ROAS</th></tr></thead>
 <tbody>${roiRows}</tbody>
 </table>` : ''}
-${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bottom:10px;">Senarai Kos (${fmt(reportCosts.length)} rekod)</h3>
+${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bottom:10px;">Cost Entries (${fmt(reportCosts.length)} records)</h3>
 <table>
-<thead><tr><th>Tarikh</th><th>Platform</th><th>Campaign</th><th style="text-align:right;">Jumlah</th><th>Nota</th></tr></thead>
+<thead><tr><th>Date</th><th>Platform</th><th>Campaign</th><th style="text-align:right;">Amount</th><th>Notes</th></tr></thead>
 <tbody>${costRows}</tbody>
 </table>` : ''}
 <p style="margin-top:24px;font-size:11px;color:#94a3b8;">Generated on ${new Date().toLocaleDateString('en-MY', { dateStyle: 'long' })}</p>
@@ -297,8 +297,8 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Marketing</p>
-          <h2 className="mt-1 text-base font-bold text-slate-900">Kos Marketing</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Track perbelanjaan marketing dan ROI per campaign</p>
+          <h2 className="mt-1 text-base font-bold text-slate-900">Marketing Costs</h2>
+          <p className="text-xs text-slate-400 mt-0.5">Track marketing spend and ROI per campaign</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => { fetchCosts(); fetchRoi(); }}
@@ -307,7 +307,7 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
           </button>
           <button type="button" onClick={() => { setShowReport((v) => !v); setShowUpload(false); setShowForm(false); }}
             className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition border ${showReport ? 'bg-violet-600 text-white border-violet-600 hover:bg-violet-700' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
-            <FileText className="h-4 w-4" />Laporan Bulanan
+            <FileText className="h-4 w-4" />Monthly Report
           </button>
           <button type="button" onClick={() => { setShowUpload((v) => !v); setShowForm(false); setShowReport(false); }}
             className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition border ${showUpload ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}>
@@ -315,7 +315,7 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
           </button>
           <button type="button" onClick={() => { setShowForm((v) => !v); setShowUpload(false); setShowReport(false); setFormError(''); }}
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition">
-            <Plus className="h-4 w-4" />Tambah Kos
+            <Plus className="h-4 w-4" />Add Cost
           </button>
         </div>
       </div>
@@ -325,8 +325,8 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
         <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Laporan Bulanan — Marketing</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Ringkasan kos dan ROI untuk bulan yang dipilih</p>
+              <h3 className="text-sm font-bold text-slate-900">Monthly Report — Marketing</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Cost and ROI summary for the selected month</p>
             </div>
             <div className="flex items-center gap-3">
               <input type="month" value={reportMonth} onChange={(e) => setReportMonth(e.target.value)}
@@ -340,15 +340,15 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
           {reportLoading ? (
             <p className="text-center text-sm text-slate-400 py-8">Loading…</p>
           ) : reportRoi.length === 0 ? (
-            <p className="text-center text-sm text-slate-400 py-8">Tiada kos marketing untuk bulan ini.</p>
+            <p className="text-center text-sm text-slate-400 py-8">No marketing costs found for this month.</p>
           ) : (
             <>
               {/* Summary */}
               <div className="grid gap-3 sm:grid-cols-3 mb-5">
                 {[
-                  { label: 'Total Kos', value: fmtRM(reportRoi.reduce((s, r) => s + r.total_cost, 0)), color: 'text-rose-600', bg: 'bg-rose-50' },
-                  { label: 'Total Hasil Campaign', value: fmtRM(reportRoi.reduce((s, r) => s + r.total_revenue, 0)), color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                  { label: 'ROAS Bulanan', value: (() => { const c = reportRoi.reduce((s, r) => s + r.total_cost, 0); const rv = reportRoi.reduce((s, r) => s + r.total_revenue, 0); return c > 0 ? `${(rv / c).toFixed(2)}x` : '—'; })(), color: 'text-violet-600', bg: 'bg-violet-50' },
+                  { label: 'Total Cost', value: fmtRM(reportRoi.reduce((s, r) => s + r.total_cost, 0)), color: 'text-rose-600', bg: 'bg-rose-50' },
+                  { label: 'Total Campaign Revenue', value: fmtRM(reportRoi.reduce((s, r) => s + r.total_revenue, 0)), color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                  { label: 'Monthly ROAS', value: (() => { const c = reportRoi.reduce((s, r) => s + r.total_cost, 0); const rv = reportRoi.reduce((s, r) => s + r.total_revenue, 0); return c > 0 ? `${(rv / c).toFixed(2)}x` : '—'; })(), color: 'text-violet-600', bg: 'bg-violet-50' },
                 ].map((s) => (
                   <div key={s.label} className={`rounded-xl ${s.bg} border border-slate-200 px-4 py-3`}>
                     <p className="text-xs font-semibold text-slate-500 mb-1">{s.label}</p>
@@ -363,7 +363,7 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
                     <tr>
                       <th className="px-4 py-3 text-left">Campaign</th>
                       <th className="px-4 py-3 text-left">Platform</th>
-                      <th className="px-4 py-3 text-right">Kos</th>
+                      <th className="px-4 py-3 text-right">Cost</th>
                       <th className="px-4 py-3 text-right">Donation</th>
                       <th className="px-4 py-3 text-right">Net</th>
                       <th className="px-4 py-3 text-right">ROAS</th>
@@ -426,10 +426,10 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
             <div className="text-3xl mb-2">📂</div>
             {pendingFile ? (
               <><p className="text-sm font-bold text-emerald-700">{pendingFile.name}</p>
-              <p className="text-xs text-emerald-500 mt-1">Fail sedia untuk diupload</p></>
+              <p className="text-xs text-emerald-500 mt-1">File ready to upload</p></>
             ) : (
-              <><p className="text-sm font-bold text-blue-700">Drag &amp; drop fail CSV</p>
-              <p className="text-xs text-slate-400 mt-1">atau klik untuk pilih fail</p></>
+              <><p className="text-sm font-bold text-blue-700">Drag &amp; drop a CSV file</p>
+              <p className="text-xs text-slate-400 mt-1">or click to browse</p></>
             )}
             <input ref={fileInputRef} type="file" accept=".csv,text/csv"
               onChange={(e) => handleFileSelect(e.target.files?.[0])} className="hidden" />
@@ -439,12 +439,12 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
           )}
           {uploadResult != null && (
             <div className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200">
-              ✅ <span className="font-semibold">{fmt(uploadResult)}</span> rekod berjaya diimport
+              ✅ <span className="font-semibold">{fmt(uploadResult)}</span> records imported successfully
             </div>
           )}
           <button type="button" onClick={handleUpload} disabled={!pendingFile || uploading}
             className="mt-4 w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 transition">
-            {uploading ? 'Memproses…' : 'Upload & Proses CSV'}
+            {uploading ? 'Processing…' : 'Upload & Process CSV'}
           </button>
         </div>
       )}
@@ -452,7 +452,7 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
       {/* Manual form */}
       {showForm && (
         <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-          <h3 className="text-sm font-bold text-slate-900 mb-4">Rekod Kos Marketing Baru</h3>
+          <h3 className="text-sm font-bold text-slate-900 mb-4">New Marketing Cost Entry</h3>
           {formError && (
             <div className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">{formError}</div>
           )}
@@ -467,31 +467,31 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Nama Campaign</label>
-              <input name="campaign" value={form.campaign} onChange={handleChange} placeholder="cth: Ramadan 2024"
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Campaign Name</label>
+              <input name="campaign" value={form.campaign} onChange={handleChange} placeholder="e.g. Ramadan 2024"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Tarikh</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date</label>
               <input type="date" name="cost_date" value={form.cost_date} onChange={handleChange}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Jumlah Kos (RM)</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Amount (RM)</label>
               <input type="number" step="0.01" min="0" name="amount" value={form.amount} onChange={handleChange} placeholder="0.00"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
             </div>
             <div className="sm:col-span-2 lg:col-span-2">
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Nota (optional)</label>
-              <input name="notes" value={form.notes} onChange={handleChange} placeholder="Sebarang nota tambahan..."
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Notes (optional)</label>
+              <input name="notes" value={form.notes} onChange={handleChange} placeholder="Any additional notes..."
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
             </div>
             <div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-2">
               <button type="button" onClick={() => { setShowForm(false); setForm(initialForm); setFormError(''); }}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Batal</button>
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
               <button type="submit" disabled={saving}
                 className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition">
-                {saving ? 'Menyimpan…' : 'Simpan'}
+                {saving ? 'Saving…' : 'Save'}
               </button>
             </div>
           </form>
@@ -503,7 +503,7 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
         <div className="rounded-xl bg-white border border-slate-200 px-5 py-4">
           <div className="flex items-center gap-2 mb-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-500"><DollarSign className="h-3.5 w-3.5 text-white" /></div>
-            <p className="text-xs font-semibold text-slate-500">Total Kos Marketing</p>
+            <p className="text-xs font-semibold text-slate-500">Total Marketing Cost</p>
           </div>
           <p className="text-2xl font-bold text-slate-900">{fmtShort(totalCost)}</p>
           <p className="text-xs text-slate-400 mt-0.5">{fmtRM(totalCost)}</p>
@@ -511,7 +511,7 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
         <div className="rounded-xl bg-white border border-slate-200 px-5 py-4">
           <div className="flex items-center gap-2 mb-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500"><TrendingUp className="h-3.5 w-3.5 text-white" /></div>
-            <p className="text-xs font-semibold text-slate-500">Total Hasil Campaign</p>
+            <p className="text-xs font-semibold text-slate-500">Total Campaign Revenue</p>
           </div>
           <p className="text-2xl font-bold text-slate-900">{fmtShort(totalRevenue)}</p>
           <p className="text-xs text-slate-400 mt-0.5">{fmtRM(totalRevenue)}</p>
@@ -523,7 +523,7 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
           </div>
           <p className="text-2xl font-bold text-slate-900">{overallRoas.toFixed(2)}x</p>
           <p className="text-xs text-slate-400 mt-0.5">
-            {overallRoas >= 1 ? `Untung RM ${(totalRevenue - totalCost).toLocaleString('en-MY', { minimumFractionDigits: 2 })}` : totalCost > 0 ? 'Belum pulang modal' : 'Tiada data'}
+            {overallRoas >= 1 ? `Profit RM ${(totalRevenue - totalCost).toLocaleString('en-MY', { minimumFractionDigits: 2 })}` : totalCost > 0 ? 'Below break-even' : 'No data'}
           </p>
         </div>
       </div>
@@ -540,7 +540,7 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
               <tr>
                 <th className="px-5 py-3 text-left">Campaign</th>
                 <th className="px-5 py-3 text-left">Platform</th>
-                <th className="px-5 py-3 text-right">Kos</th>
+                <th className="px-5 py-3 text-right">Cost</th>
                 <th className="px-5 py-3 text-right">Donation</th>
                 <th className="px-5 py-3 text-right">Net</th>
                 <th className="px-5 py-3 text-right">ROAS</th>
@@ -550,7 +550,7 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
               {roiLoading ? (
                 <tr><td colSpan="6" className="px-5 py-10 text-center text-slate-400">Loading…</td></tr>
               ) : roi.length === 0 ? (
-                <tr><td colSpan="6" className="px-5 py-10 text-center text-slate-400">Tiada data ROI. Tambah kos marketing untuk mula.</td></tr>
+                <tr><td colSpan="6" className="px-5 py-10 text-center text-slate-400">No ROI data. Add marketing costs to get started.</td></tr>
               ) : roi.map((row, i) => (
                 <tr key={i} className="hover:bg-slate-50 transition">
                   <td className="px-5 py-3.5 font-medium text-slate-800 max-w-[200px] truncate">{row.campaign}</td>
@@ -580,19 +580,19 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
       <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <h3 className="text-sm font-bold text-slate-900">
-            Senarai Kos {total > 0 && <span className="text-slate-400 font-normal">({fmt(total)} rekod)</span>}
+            Cost Entries {total > 0 && <span className="text-slate-400 font-normal">({fmt(total)} records)</span>}
           </h3>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100 text-sm text-slate-600">
             <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
               <tr>
-                <th className="px-5 py-3 text-left">Tarikh</th>
+                <th className="px-5 py-3 text-left">Date</th>
                 <th className="px-5 py-3 text-left">Platform</th>
                 <th className="px-5 py-3 text-left">Campaign</th>
-                <th className="px-5 py-3 text-right">Jumlah</th>
-                <th className="px-5 py-3 text-left">Nota</th>
-                <th className="px-5 py-3 text-left">Oleh</th>
+                <th className="px-5 py-3 text-right">Amount</th>
+                <th className="px-5 py-3 text-left">Notes</th>
+                <th className="px-5 py-3 text-left">Added by</th>
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
@@ -600,7 +600,7 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
               {loading ? (
                 <tr><td colSpan="7" className="px-5 py-10 text-center text-slate-400">Loading…</td></tr>
               ) : costs.length === 0 ? (
-                <tr><td colSpan="7" className="px-5 py-10 text-center text-slate-400">Tiada rekod kos. Klik "Tambah Kos" untuk mula.</td></tr>
+                <tr><td colSpan="7" className="px-5 py-10 text-center text-slate-400">No cost records. Click "Add Cost" to get started.</td></tr>
               ) : costs.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50 transition">
                   <td className="px-5 py-3.5 whitespace-nowrap text-slate-500">{c.cost_date}</td>
@@ -628,12 +628,12 @@ ${reportCosts.length > 0 ? `<h3 style="font-size:13px;font-weight:700;margin-bot
           <div className="flex items-center justify-between gap-4 px-5 py-4 border-t border-slate-100">
             <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
               className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40 transition">
-              Sebelum
+              Previous
             </button>
-            <span className="text-sm text-slate-500">Halaman {page} / {totalPages}</span>
+            <span className="text-sm text-slate-500">Page {page} of {totalPages}</span>
             <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
               className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40 transition">
-              Seterusnya
+              Next
             </button>
           </div>
         )}

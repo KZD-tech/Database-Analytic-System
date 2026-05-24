@@ -136,7 +136,7 @@ export default function OrderInput({ onOrderCreated }) {
       const text = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error('Gagal baca fail CSV.'));
+        reader.onerror = () => reject(new Error('Failed to read CSV file.'));
         reader.readAsText(pendingFile, 'utf-8');
       });
       const rows = parseCsv(String(text));
@@ -150,7 +150,7 @@ export default function OrderInput({ onOrderCreated }) {
       if (fileInputRef.current) fileInputRef.current.value = '';
       onOrderCreated();
     } catch (err) {
-      setUploadError(err.message || 'Gagal upload CSV. Sila cuba lagi.');
+      setUploadError(err.message || 'Failed to upload CSV. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -355,12 +355,12 @@ export default function OrderInput({ onOrderCreated }) {
           {pendingFile ? (
             <>
               <p className="text-sm font-bold text-emerald-700">{pendingFile.name}</p>
-              <p className="text-xs text-emerald-500 mt-1">Fail sedia untuk diupload</p>
+              <p className="text-xs text-emerald-500 mt-1">File ready to upload</p>
             </>
           ) : (
             <>
-              <p className="text-sm font-bold text-blue-700">Drag &amp; drop fail CSV</p>
-              <p className="text-xs text-slate-400 mt-1">atau klik untuk pilih fail</p>
+              <p className="text-sm font-bold text-blue-700">Drag &amp; drop a CSV file</p>
+              <p className="text-xs text-slate-400 mt-1">or click to browse</p>
             </>
           )}
           <input
@@ -389,9 +389,9 @@ export default function OrderInput({ onOrderCreated }) {
         {/* Result */}
         {uploadResult && (
           <div className="mt-4 rounded-xl bg-emerald-50 px-5 py-4 space-y-1.5 ring-1 ring-emerald-200">
-            <p className="text-sm text-emerald-800">✅ <span className="font-semibold">{uploadResult.rows.toLocaleString('en-MY')}</span> baris berjaya diproses</p>
-            <p className="text-sm text-emerald-800">✅ <span className="font-semibold">{uploadResult.newDonors.toLocaleString('en-MY')}</span> donor baru ditambah</p>
-            <p className="text-sm text-emerald-800">✅ <span className="font-semibold">{uploadResult.transactions.toLocaleString('en-MY')}</span> transaksi direkodkan</p>
+            <p className="text-sm text-emerald-800">✅ <span className="font-semibold">{uploadResult.rows.toLocaleString('en-MY')}</span> rows processed successfully</p>
+            <p className="text-sm text-emerald-800">✅ <span className="font-semibold">{uploadResult.newDonors.toLocaleString('en-MY')}</span> new donors added</p>
+            <p className="text-sm text-emerald-800">✅ <span className="font-semibold">{uploadResult.transactions.toLocaleString('en-MY')}</span> transactions recorded</p>
           </div>
         )}
 
@@ -402,7 +402,7 @@ export default function OrderInput({ onOrderCreated }) {
           disabled={!pendingFile || uploading}
           className="mt-5 w-full rounded-2xl bg-blue-600 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {uploading ? 'Memproses… Sila tunggu' : 'Upload & Proses CSV'}
+          {uploading ? 'Processing… Please wait' : 'Upload & Process CSV'}
         </button>
       </div>
     </div>
