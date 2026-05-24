@@ -8,7 +8,10 @@ const fmtMonth = (s) => {
   return new Date(Number(y), Number(m) - 1).toLocaleString('en-MY', { month: 'short', year: '2-digit' });
 };
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const SOURCE_COLORS = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316','#84cc16','#ec4899','#6366f1'];
+const SOURCE_COLORS = ['#6366f1','#10b981','#f59e0b','#0ea5e9','#f43f5e','#8b5cf6','#f97316','#84cc16','#ec4899','#06b6d4'];
+const CARD = 'rounded-xl bg-white border border-slate-200 p-5';
+const LABEL = 'text-xs font-semibold text-slate-400 uppercase tracking-widest';
+const TITLE = 'mt-0.5 text-sm font-semibold text-slate-800';
 
 export function DonorGrowthChart() {
   const [data, setData] = useState([]);
@@ -32,21 +35,16 @@ export function DonorGrowthChart() {
   const linePath = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${xPos(i)},${cumYScale(d.cumulative)}`).join(' ');
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
-            <TrendingUp className="h-5 w-5 text-blue-500" />
-          </div>
-          <div>
-            <p className="font-bold text-slate-900 text-sm">Donor Growth</p>
-            <p className="text-xs text-slate-400">New donors per month + cumulative total</p>
-          </div>
+    <div className={CARD}>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <p className={LABEL}>Donor Growth</p>
+          <p className={TITLE}>New donors per month + cumulative total</p>
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
           {[6, 12, 24].map(m => (
             <button key={m} type="button" onClick={() => setMonths(m)}
-              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${months === m ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${months === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
               {m}M
             </button>
           ))}
@@ -58,26 +56,32 @@ export function DonorGrowthChart() {
         <div className="flex items-center justify-center h-56 text-slate-400 text-sm">No data available</div>
       ) : (
         <>
-          <div className="flex items-center gap-4 mb-3 text-xs text-slate-500">
-            <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-blue-400" />New donors</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-5 bg-emerald-500" />Cumulative</span>
+          <div className="flex items-center gap-4 mb-3 text-xs text-slate-400">
+            <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{background:'#a5b4fc'}} />New donors</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block h-0.5 w-4" style={{background:'#6366f1'}} />Cumulative</span>
           </div>
           <div className="overflow-x-auto">
             <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: Math.max(280, data.length * 36) }}>
-              {[0, 0.25, 0.5, 0.75, 1].map(t => (
+              <defs>
+                <linearGradient id="growthGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity="0.1" />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {[0.25, 0.5, 0.75, 1].map(t => (
                 <g key={t}>
-                  <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" />
-                  <text x={PL - 4} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9" fill="#94a3b8">{Math.round(maxNew * t)}</text>
+                  <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 3" />
+                  <text x={PL - 6} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9.5" fill="#94a3b8">{Math.round(maxNew * t)}</text>
                 </g>
               ))}
               {data.map((d, i) => (
                 <rect key={i} x={xPos(i) - barW / 2} y={newYScale(d.new_donors)} width={barW}
-                  height={Math.max(0, PT + chartH - newYScale(d.new_donors))} rx="3" fill="#93c5fd" />
+                  height={Math.max(0, PT + chartH - newYScale(d.new_donors))} rx="3" fill="#c7d2fe" />
               ))}
-              {data.length > 1 && <path d={linePath} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />}
-              {data.map((d, i) => <circle key={i} cx={xPos(i)} cy={cumYScale(d.cumulative)} r="3" fill="#10b981" />)}
+              {data.length > 1 && <path d={linePath} fill="none" stroke="#6366f1" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+              {data.map((d, i) => <circle key={i} cx={xPos(i)} cy={cumYScale(d.cumulative)} r="3" fill="#fff" stroke="#6366f1" strokeWidth="2" />)}
               {data.map((d, i) => (
-                <text key={i} x={xPos(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="#94a3b8">{fmtMonth(d.month)}</text>
+                <text key={i} x={xPos(i)} y={H - 6} textAnchor="middle" fontSize="9.5" fill="#94a3b8">{fmtMonth(d.month)}</text>
               ))}
             </svg>
           </div>
@@ -106,21 +110,16 @@ export function NewVsReturningChart() {
   const yScale = (v) => (v / maxVal) * chartH;
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
-            <Users className="h-5 w-5 text-emerald-500" />
-          </div>
-          <div>
-            <p className="font-bold text-slate-900 text-sm">New vs Returning Donors</p>
-            <p className="text-xs text-slate-400">Monthly breakdown of donor segments</p>
-          </div>
+    <div className={CARD}>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <p className={LABEL}>New vs Returning</p>
+          <p className={TITLE}>Monthly breakdown of donor segments</p>
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
           {[6, 12, 24].map(m => (
             <button key={m} type="button" onClick={() => setMonths(m)}
-              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${months === m ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+              className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${months === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
               {m}M
             </button>
           ))}
@@ -132,16 +131,16 @@ export function NewVsReturningChart() {
         <div className="flex items-center justify-center h-56 text-slate-400 text-sm">No data available</div>
       ) : (
         <>
-          <div className="flex items-center gap-4 mb-3 text-xs text-slate-500">
-            <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-blue-400" />New</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-3 rounded bg-emerald-400" />Returning</span>
+          <div className="flex items-center gap-4 mb-3 text-xs text-slate-400">
+            <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-indigo-300" />New</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-300" />Returning</span>
           </div>
           <div className="overflow-x-auto">
             <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: Math.max(280, data.length * 36) }}>
-              {[0, 0.25, 0.5, 0.75, 1].map(t => (
+              {[0.25, 0.5, 0.75, 1].map(t => (
                 <g key={t}>
-                  <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" />
-                  <text x={PL - 4} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9" fill="#94a3b8">{Math.round(maxVal * t)}</text>
+                  <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 3" />
+                  <text x={PL - 6} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9.5" fill="#94a3b8">{Math.round(maxVal * t)}</text>
                 </g>
               ))}
               {data.map((d, i) => {
@@ -150,9 +149,9 @@ export function NewVsReturningChart() {
                 const baseY = PT + chartH;
                 return (
                   <g key={i}>
-                    <rect x={xPos(i) - barW / 2} y={baseY - rH} width={barW} height={rH} fill="#6ee7b7" />
-                    <rect x={xPos(i) - barW / 2} y={baseY - rH - nH} width={barW} height={nH} rx="3" fill="#93c5fd" />
-                    <text x={xPos(i)} y={H - 6} textAnchor="middle" fontSize="9" fill="#94a3b8">{fmtMonth(d.month)}</text>
+                    <rect x={xPos(i) - barW / 2} y={baseY - rH} width={barW} height={rH} fill="#6ee7b7" opacity="0.8" />
+                    <rect x={xPos(i) - barW / 2} y={baseY - rH - nH} width={barW} height={nH} rx="2" fill="#a5b4fc" opacity="0.9" />
+                    <text x={xPos(i)} y={H - 6} textAnchor="middle" fontSize="9.5" fill="#94a3b8">{fmtMonth(d.month)}</text>
                   </g>
                 );
               })}
@@ -192,15 +191,10 @@ export function SourceDonutChart() {
   });
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50">
-          <PieChart className="h-5 w-5 text-violet-500" />
-        </div>
-        <div>
-          <p className="font-bold text-slate-900 text-sm">Source Breakdown</p>
-          <p className="text-xs text-slate-400">Donation amount by acquisition source</p>
-        </div>
+    <div className={CARD}>
+      <div className="mb-4">
+        <p className={LABEL}>Source Breakdown</p>
+        <p className={TITLE}>Donation amount by acquisition source</p>
       </div>
       {loading ? (
         <div className="flex items-center justify-center h-48 text-slate-400 text-sm">Loading…</div>
@@ -273,27 +267,22 @@ export function YoyChart() {
   const barY = (v) => PT + chartH - barH(v);
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50">
-            <BarChart2 className="h-5 w-5 text-amber-500" />
-          </div>
-          <div>
-            <p className="font-bold text-slate-900 text-sm">Year-over-Year Comparison</p>
-            <p className="text-xs text-slate-400">Monthly donation totals — all years in data</p>
-          </div>
+    <div className={CARD}>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <p className={LABEL}>Year-over-Year</p>
+          <p className={TITLE}>Monthly donation totals — all years in data</p>
         </div>
         {years.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {years.map((y, i) => {
               const color = YEAR_COLORS[i % YEAR_COLORS.length];
               const isHidden = hidden.has(y);
               return (
                 <button key={y} type="button" onClick={() => toggleYear(y)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold border transition ${isHidden ? 'border-slate-200 bg-white text-slate-400' : 'border-transparent text-white'}`}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold border transition ${isHidden ? 'border-slate-200 bg-white text-slate-400' : 'border-transparent text-white'}`}
                   style={isHidden ? {} : { backgroundColor: color }}>
-                  <span className="inline-block h-2 w-2 rounded-sm" style={{ background: isHidden ? '#cbd5e1' : '#fff' }} />
+                  <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: isHidden ? '#cbd5e1' : '#fff' }} />
                   {y}
                 </button>
               );
@@ -310,10 +299,10 @@ export function YoyChart() {
         <div className="overflow-x-auto">
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 420 }}>
             {/* Grid lines */}
-            {[0, 0.25, 0.5, 0.75, 1].map(t => (
+            {[0.25, 0.5, 0.75, 1].map(t => (
               <g key={t}>
-                <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" />
-                <text x={PL - 6} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9" fill="#94a3b8">{fmtK(maxVal * t)}</text>
+                <line x1={PL} y1={PT + chartH * (1 - t)} x2={W - PR} y2={PT + chartH * (1 - t)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 3" />
+                <text x={PL - 6} y={PT + chartH * (1 - t) + 4} textAnchor="end" fontSize="9.5" fill="#94a3b8">{fmtK(maxVal * t)}</text>
               </g>
             ))}
             {/* Bars */}
@@ -346,7 +335,7 @@ export default function Charts() {
   const [key, setKey] = useState(0);
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <div className="flex items-center justify-between rounded-xl bg-white border border-slate-200 p-5">
         <div>
           <p className="font-bold text-slate-900">Advanced Charts</p>
           <p className="text-sm text-slate-400">Visual analytics across donor behaviour and donation trends</p>
