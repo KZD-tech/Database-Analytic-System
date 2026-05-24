@@ -159,17 +159,22 @@ export default function WebhooksPanel() {
           {/* OnPay highlighted */}
           <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-1">
             <UrlRow label="OnPay (onpay.my) — POST" url={onpayUrl} />
-            <div className="px-4 pb-3 pt-1 text-xs text-blue-700 space-y-1">
+            <div className="px-4 pb-3 pt-1 text-xs text-blue-700 space-y-1.5">
               <p className="font-semibold">Setup in OnPay dashboard:</p>
               <ol className="list-decimal pl-4 space-y-0.5">
-                <li>Log in to <strong>merchant.onpay.my</strong> → Settings → Webhook / Notification</li>
-                <li>Set <strong>Webhook URL</strong> to the URL above</li>
-                <li>Method: <strong>POST</strong>, Format: <strong>JSON</strong></li>
-                <li>Enable trigger: <strong>Payment Success</strong></li>
-                <li>Save &amp; test with a real or sandbox transaction</li>
+                <li>Log in to <strong>onpay.my</strong> → <strong>Tetapan &gt; Sistem &gt; API &amp; Webhook</strong></li>
+                <li>Copy the <strong>Token</strong> shown there — add it to Railway as env var <code className="rounded bg-blue-100 px-1">ONPAY_WEBHOOK_TOKEN</code></li>
+                <li>Set <strong>Webhook URL</strong> to the URL above (per order form or globally)</li>
+                <li>Save. OnPay will POST JSON with <code className="rounded bg-blue-100 px-1">application/json</code> header</li>
               </ol>
-              <p className="mt-1.5">Fields mapped: <code className="rounded bg-blue-100 px-1">buyer_name</code> · <code className="rounded bg-blue-100 px-1">buyer_email</code> · <code className="rounded bg-blue-100 px-1">buyer_phone</code> · <code className="rounded bg-blue-100 px-1">amount</code> · <code className="rounded bg-blue-100 px-1">payment_date</code> · <code className="rounded bg-blue-100 px-1">campaign</code></p>
-              <p>Only <strong>SUCCESS / PAID</strong> status payments will be recorded. Failed payments are ignored.</p>
+              <div className="mt-1.5 space-y-0.5">
+                <p className="font-semibold">Events &amp; fields mapped:</p>
+                <p>✅ <code className="rounded bg-blue-100 px-1">sale.confirmed</code> → recorded as donation</p>
+                <p>⏭ <code className="rounded bg-blue-100 px-1">sale.created</code> · <code className="rounded bg-blue-100 px-1">sale.canceled</code> → ignored</p>
+                <p className="mt-1">Donor: <code className="rounded bg-blue-100 px-1">sale.client_fullname</code> · <code className="rounded bg-blue-100 px-1">sale.client_email</code> · <code className="rounded bg-blue-100 px-1">sale.client_phone_number</code></p>
+                <p>Amount: <code className="rounded bg-blue-100 px-1">sale.total_amount</code> &nbsp;·&nbsp; Date: <code className="rounded bg-blue-100 px-1">sale.payment_at</code></p>
+                <p>Campaign: <code className="rounded bg-blue-100 px-1">sale.extra_field_1</code> (if set) else first product name</p>
+              </div>
             </div>
           </div>
 

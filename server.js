@@ -504,21 +504,33 @@ app.post('/api/integrations/onpay', async (req, res) => {
   const body = req.body || {};
   const now = new Date().toISOString();
 
-  // Only process successful payments
-  const status = (body.status || body.payment_status || '').toUpperCase();
-  if (status && !['SUCCESS', 'PAID', 'COMPLETED', '1'].includes(status)) {
-    return res.json({ success: false, skipped: true, reason: `Payment status: ${status}` });
+  // Token verification — set ONPAY_WEBHOOK_TOKEN in Railway env vars
+  const webhookToken = process.env.ONPAY_WEBHOOK_TOKEN;
+  if (webhookToken && body.token !== webhookToken) {
+    return res.status(401).json({ success: false, error: 'Invalid token.' });
   }
 
-  const name  = body.buyer_name  || body.payer_name  || body.customer_name || body.name  || 'Unknown';
-  const email = body.buyer_email || body.payer_email  || body.customer_email || body.email || '';
-  const phone = body.buyer_phone || body.payer_phone  || body.customer_phone || body.phone || body.mobile || '';
-  const amount = Number(body.amount || body.total_amount || body.price || 0);
-  const campaign = body.campaign || body.campaign_name || body.ref || null;
+  // Only record confirmed sales (payment received). Skip sale.created and sale.canceled.
+  const eventType = body.event_type || '';
+  if (eventType !== 'sale.confirmed') {
+    return res.json({ success: false, skipped: true, reason: `Event ignored: ${eventType}` });
+  }
 
-  let donationDate = now.slice(0, 10);
-  const rawDate = body.payment_date || body.transaction_date || body.created_at || body.date;
-  if (rawDate) donationDate = String(rawDate).slice(0, 10);
+  const sale = body.sale || {};
+
+  const name  = (sale.client_fullname  || '').trim() || 'Unknown';
+  const email = (sale.client_email     || '').trim();
+  const phone = (sale.client_phone_number || '').trim();
+  const amount = Number(sale.total_amount || 0);
+
+  // Campaign: prefer extra_field_1, fall back to first product name
+  const campaign = (sale.extra_field_1 || '').trim()
+    || (Array.isArray(sale.products) && sale.products[0]?.name ? sale.products[0].name.trim() : null)
+    || null;
+
+  // payment_at format: "2025-07-21 12:00:55" → slice first 10 chars
+  const rawDate = sale.payment_at || sale.confirmed_at || sale.created_at;
+  const donationDate = rawDate ? String(rawDate).slice(0, 10) : now.slice(0, 10);
 
   const { donorId, isNew, donor } = await upsertDonor({ name, phone, email });
   if (isNew) fireWebhooks('donor.created', donor);
@@ -528,7 +540,7 @@ app.post('/api/integrations/onpay', async (req, res) => {
     donation_date: donationDate,
     amount,
     source: 'onpay',
-    campaign_name: campaign || null,
+    campaign_name: campaign,
     created_at: now,
   }]).select('*').single();
 
