@@ -499,6 +499,45 @@ app.post('/api/integrations/generic', async (req, res) => {
   res.json({ success: true, donor_id: donorId, new_donor: isNew });
 });
 
+// OnPay integration
+app.post('/api/integrations/onpay', async (req, res) => {
+  const body = req.body || {};
+  const now = new Date().toISOString();
+
+  // Only process successful payments
+  const status = (body.status || body.payment_status || '').toUpperCase();
+  if (status && !['SUCCESS', 'PAID', 'COMPLETED', '1'].includes(status)) {
+    return res.json({ success: false, skipped: true, reason: `Payment status: ${status}` });
+  }
+
+  const name  = body.buyer_name  || body.payer_name  || body.customer_name || body.name  || 'Unknown';
+  const email = body.buyer_email || body.payer_email  || body.customer_email || body.email || '';
+  const phone = body.buyer_phone || body.payer_phone  || body.customer_phone || body.phone || body.mobile || '';
+  const amount = Number(body.amount || body.total_amount || body.price || 0);
+  const campaign = body.campaign || body.campaign_name || body.ref || null;
+
+  let donationDate = now.slice(0, 10);
+  const rawDate = body.payment_date || body.transaction_date || body.created_at || body.date;
+  if (rawDate) donationDate = String(rawDate).slice(0, 10);
+
+  const { donorId, isNew, donor } = await upsertDonor({ name, phone, email });
+  if (isNew) fireWebhooks('donor.created', donor);
+
+  const { data: newDonation } = await supabase.from('donations').insert([{
+    donor_id: donorId,
+    donation_date: donationDate,
+    amount,
+    source: 'onpay',
+    campaign_name: campaign || null,
+    created_at: now,
+  }]).select('*').single();
+
+  fireWebhooks('donation.created', newDonation);
+
+  logInbound('inbound.onpay');
+  res.json({ success: true, donor_id: donorId, new_donor: isNew });
+});
+
 // ─── Protected routes ─────────────────────────────────────────────────────────
 
 app.use('/api', requireAuth('viewer'));

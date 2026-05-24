@@ -128,10 +128,11 @@ export default function WebhooksPanel() {
     }
   };
 
-  const inboundUrl = `${BASE_URL}/api/webhooks/receive/${inboundSecret}`;
-  const shopifyUrl = `${BASE_URL}/api/integrations/shopify`;
+  const inboundUrl    = `${BASE_URL}/api/webhooks/receive/${inboundSecret}`;
+  const shopifyUrl    = `${BASE_URL}/api/integrations/shopify`;
   const woocommerceUrl = `${BASE_URL}/api/integrations/woocommerce`;
-  const genericUrl = `${BASE_URL}/api/integrations/generic`;
+  const onpayUrl      = `${BASE_URL}/api/integrations/onpay`;
+  const genericUrl    = `${BASE_URL}/api/integrations/generic`;
 
   const recentLogs = logs.slice(0, 50);
 
@@ -155,6 +156,23 @@ export default function WebhooksPanel() {
         </div>
 
         <div className="space-y-3">
+          {/* OnPay highlighted */}
+          <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-1">
+            <UrlRow label="OnPay (onpay.my) — POST" url={onpayUrl} />
+            <div className="px-4 pb-3 pt-1 text-xs text-blue-700 space-y-1">
+              <p className="font-semibold">Setup in OnPay dashboard:</p>
+              <ol className="list-decimal pl-4 space-y-0.5">
+                <li>Log in to <strong>merchant.onpay.my</strong> → Settings → Webhook / Notification</li>
+                <li>Set <strong>Webhook URL</strong> to the URL above</li>
+                <li>Method: <strong>POST</strong>, Format: <strong>JSON</strong></li>
+                <li>Enable trigger: <strong>Payment Success</strong></li>
+                <li>Save &amp; test with a real or sandbox transaction</li>
+              </ol>
+              <p className="mt-1.5">Fields mapped: <code className="rounded bg-blue-100 px-1">buyer_name</code> · <code className="rounded bg-blue-100 px-1">buyer_email</code> · <code className="rounded bg-blue-100 px-1">buyer_phone</code> · <code className="rounded bg-blue-100 px-1">amount</code> · <code className="rounded bg-blue-100 px-1">payment_date</code> · <code className="rounded bg-blue-100 px-1">campaign</code></p>
+              <p>Only <strong>SUCCESS / PAID</strong> status payments will be recorded. Failed payments are ignored.</p>
+            </div>
+          </div>
+
           <UrlRow label="Shopify — POST" url={shopifyUrl} />
           <UrlRow label="WooCommerce — POST" url={woocommerceUrl} />
           <UrlRow label="Generic — POST" url={genericUrl} />
@@ -162,7 +180,7 @@ export default function WebhooksPanel() {
         </div>
 
         <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          <strong>Tip:</strong> For Shopify, configure the <code className="rounded bg-slate-200 px-1">orders/create</code> webhook and point it to the Shopify URL above. For WooCommerce, go to WooCommerce &rarr; Settings &rarr; Advanced &rarr; Webhooks.
+          <strong>Tip:</strong> All inbound activity appears in the Webhook Activity Log below. Check there to confirm OnPay is delivering correctly.
         </div>
       </section>
 
