@@ -69,7 +69,7 @@ const lineChartData = (series) => {
     return { t, y: PT + plotH * (1 - t), lbl };
   });
 
-  return { W, H, PL, PT, PB, plotW, plotH, points, linePath, areaPath, maxV, ticks };
+  return { W, H, PL, PT, PB, plotW, plotH, points, linePath, areaPath, maxV, ticks, n };
 };
 
 const pieChartData = (summary) => {
@@ -437,25 +437,25 @@ export default function Dashboard({ summary, loading: appLoading }) {
         ))}
       </div>
 
-      {/* Charts row */}
-      <div className="grid gap-4 xl:grid-cols-[1fr_260px]">
-        {/* Line chart */}
-        <div className="rounded-xl bg-white border border-slate-200 p-5">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Donation Volume</p>
-              <h3 className="mt-0.5 text-sm font-semibold text-slate-800">Monthly Totals</h3>
-            </div>
-            {(startDate || endDate) && (
-              <span className="text-xs text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
-                {startDate || '—'} → {endDate || '—'}
-              </span>
-            )}
+      {/* Line chart — full width */}
+      <div className="rounded-xl bg-white border border-slate-200 p-5">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Donation Volume</p>
+            <h3 className="mt-0.5 text-sm font-semibold text-slate-800">Monthly Totals</h3>
           </div>
+          {(startDate || endDate) && (
+            <span className="text-xs text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
+              {startDate || '—'} → {endDate || '—'}
+            </span>
+          )}
+        </div>
 
-          {chartLoading ? (
-            <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">Loading…</div>
-          ) : (
+        {chartLoading ? (
+          <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">Loading…</div>
+        ) : (() => {
+          const labelStep = lineData.n > 14 ? Math.ceil(lineData.n / 14) : 1;
+          return (
             <svg viewBox={`0 0 ${lineData.W} ${lineData.H}`} className="w-full h-[280px]">
               <defs>
                 <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
@@ -482,60 +482,61 @@ export default function Dashboard({ summary, loading: appLoading }) {
               {lineData.linePath && (
                 <path d={lineData.linePath} fill="none" stroke="#6366f1" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
               )}
-              {/* Dots + labels */}
+              {/* Dots + labels — skip labels when too dense */}
               {lineData.points.map((p, i) => (
                 <g key={i}>
-                  <circle cx={p.x} cy={p.y} r="3" fill="#fff" stroke="#6366f1" strokeWidth="2" />
-                  <text x={p.x} y={lineData.H - lineData.PB + 14} fill="#94a3b8" fontSize="9.5" textAnchor="middle">{p.label}</text>
+                  <circle cx={p.x} cy={p.y} r={lineData.n > 40 ? 1.5 : 3} fill="#fff" stroke="#6366f1" strokeWidth="2" />
+                  {i % labelStep === 0 && (
+                    <text x={p.x} y={lineData.H - lineData.PB + 14} fill="#94a3b8" fontSize="9.5" textAnchor="middle">{p.label}</text>
+                  )}
                 </g>
               ))}
             </svg>
-          )}
+          );
+        })()}
+      </div>
+
+      {/* Donor Status donut */}
+      <div className="rounded-xl bg-white border border-slate-200 p-5">
+        <div className="mb-4">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Overview</p>
+          <h3 className="mt-0.5 text-sm font-semibold text-slate-800">Donor Status</h3>
         </div>
-
-        {/* Donut chart */}
-        <div className="rounded-xl bg-white border border-slate-200 p-5">
-          <div className="mb-4">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Overview</p>
-            <h3 className="mt-0.5 text-sm font-semibold text-slate-800">Donor Status</h3>
-          </div>
-
-          {(() => {
-            const pie = pieChartData(summary);
-            return (
-              <div className="flex flex-col items-center gap-4">
-                <svg viewBox="0 0 220 220" className="w-[140px]">
-                  {pie.total === 0 ? (
-                    <circle cx="110" cy="110" r="88" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1" />
-                  ) : (
-                    pie.paths.map((seg) => (
-                      <path key={seg.key} d={seg.d} fill={seg.color} opacity="0.9">
-                        <title>{seg.label}: {seg.value} ({seg.percent}%)</title>
-                      </path>
-                    ))
-                  )}
-                  <circle cx="110" cy="110" r="52" fill="white" />
-                  <text x="110" y="106" textAnchor="middle" fill="#0f172a" fontSize="18" fontWeight="700">{pie.total.toLocaleString('en-MY')}</text>
-                  <text x="110" y="122" textAnchor="middle" fill="#94a3b8" fontSize="9">donors</text>
-                </svg>
-                <div className="w-full space-y-2">
-                  {pie.paths.map((seg) => (
-                    <div key={seg.key} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: seg.color }} />
-                        <span className="text-slate-600">{seg.label}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-800">{seg.value.toLocaleString('en-MY')}</span>
-                        <span className="text-slate-400 w-7 text-right">{seg.percent}%</span>
-                      </div>
+        {(() => {
+          const pie = pieChartData(summary);
+          return (
+            <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
+              <svg viewBox="0 0 220 220" className="w-[130px] shrink-0">
+                {pie.total === 0 ? (
+                  <circle cx="110" cy="110" r="88" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1" />
+                ) : (
+                  pie.paths.map((seg) => (
+                    <path key={seg.key} d={seg.d} fill={seg.color} opacity="0.9">
+                      <title>{seg.label}: {seg.value} ({seg.percent}%)</title>
+                    </path>
+                  ))
+                )}
+                <circle cx="110" cy="110" r="52" fill="white" />
+                <text x="110" y="106" textAnchor="middle" fill="#0f172a" fontSize="18" fontWeight="700">{pie.total.toLocaleString('en-MY')}</text>
+                <text x="110" y="122" textAnchor="middle" fill="#94a3b8" fontSize="9">donors</text>
+              </svg>
+              <div className="flex flex-wrap gap-x-8 gap-y-2 flex-1">
+                {pie.paths.map((seg) => (
+                  <div key={seg.key} className="flex items-center justify-between gap-4 text-xs min-w-[140px]">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: seg.color }} />
+                      <span className="text-slate-600">{seg.label}</span>
                     </div>
-                  ))}
-                </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-800">{seg.value.toLocaleString('en-MY')}</span>
+                      <span className="text-slate-400">{seg.percent}%</span>
+                    </div>
+                  </div>
+                ))}
               </div>
-            );
-          })()}
-        </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Filter bar */}
