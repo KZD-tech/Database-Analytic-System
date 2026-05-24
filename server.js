@@ -100,6 +100,17 @@ function requireAuth(minRole = 'viewer') {
 
 // ─── Helper functions ─────────────────────────────────────────────────────────
 
+async function logActivity(req, action, details = {}) {
+  try {
+    await supabase.from('activity_logs').insert([{
+      user_email: req.user?.email || null,
+      user_role:  req.user?.role  || null,
+      action,
+      details,
+    }]);
+  } catch (_) { /* non-critical, never throw */ }
+}
+
 // Maps a donors row to the shape the frontend expects (uses full_name, not name)
 function parseDonorRow(row) {
   return {
@@ -348,6 +359,8 @@ app.post('/api/admin/login', async (req, res) => {
       return res.status(401).json({ error: 'Emel atau kata laluan tidak sah.' });
     }
     const token = generateToken(userRow.id, userRow.email, userRow.role);
+    req.user = { userId: userRow.id, email: userRow.email, role: userRow.role };
+    await logActivity(req, 'login', { method: 'users_table' });
     return res.json({
       token,
       user: { id: userRow.id, email: userRow.email, full_name: userRow.full_name, role: userRow.role }
@@ -356,6 +369,8 @@ app.post('/api/admin/login', async (req, res) => {
 
   // Fallback: env var credentials
   if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+    req.user = { userId: 0, email: ADMIN_EMAIL, role: 'admin' };
+    await logActivity(req, 'login', { method: 'env_fallback' });
     return res.json({
       token: ADMIN_TOKEN,
       user: { id: 0, email: ADMIN_EMAIL, full_name: 'Admin', role: 'admin' }
@@ -521,6 +536,7 @@ app.post('/api/users', requireAuth('admin'), async (req, res) => {
   }]).select('id, email, full_name, role, active, created_at, updated_at').single();
 
   if (error) return res.status(500).json({ error: error.message });
+  await logActivity(req, 'create_user', { target_email: email, role: role || 'viewer' });
   res.json(data);
 });
 
@@ -538,6 +554,7 @@ app.put('/api/users/:id', requireAuth('admin'), async (req, res) => {
   const { error } = await supabase.from('users').update(updates).eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
 
+  await logActivity(req, 'update_user', { target_id: id, changes: Object.keys(updates).filter(k => k !== 'updated_at') });
   const { data } = await supabase.from('users').select('id, email, full_name, role, active, created_at, updated_at').eq('id', id).single();
   res.json(data);
 });
@@ -547,6 +564,7 @@ app.delete('/api/users/:id', requireAuth('admin'), async (req, res) => {
   const now = new Date().toISOString();
   const { error } = await supabase.from('users').update({ active: false, updated_at: now }).eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
+  await logActivity(req, 'deactivate_user', { target_id: id });
   res.json({ success: true });
 });
 
@@ -914,6 +932,7 @@ app.post('/api/orders', requireAuth('editor'), async (req, res) => {
   }
 
   fireWebhooks('donation.created', newDonation);
+  await logActivity(req, 'add_donation', { donor: full_name, amount: Number(amount), date: finalDate, new_donor: isNew });
 
   const { data: detail } = await supabase.from('donors').select('*').eq('id', donorId).single();
   res.json({ success: true, customer: detail ? parseDonorRow(detail) : null });
@@ -1056,6 +1075,7 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
     imported += donationRows.length;
   }
 
+  await logActivity(req, 'bulk_upload', { imported, new_donors: newDonorsCount, total_records: records.length });
   res.json({ success: true, imported, new_donors: newDonorsCount });
 });
 
@@ -1161,7 +1181,23 @@ app.post('/api/donors/merge', requireAuth('manager'), async (req, res) => {
   const { error: delErr } = await supabase.from('donors').delete().eq('id', delete_id);
   if (delErr) return res.status(500).json({ error: delErr.message });
 
+  await logActivity(req, 'merge_donors', { keep_id, delete_id });
   res.json({ success: true });
+});
+
+// ─── Activity Logs ────────────────────────────────────────────────────────────
+
+app.get('/api/activity-logs', requireAuth('manager'), async (req, res) => {
+  const { page = 1, per_page = 50, action } = req.query;
+  const from = (Number(page) - 1) * Number(per_page);
+  const to   = from + Number(per_page) - 1;
+
+  let query = supabase.from('activity_logs').select('*', { count: 'exact' }).order('created_at', { ascending: false }).range(from, to);
+  if (action && action !== 'all') query = query.eq('action', action);
+
+  const { data, error, count } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ logs: data || [], total: count || 0, page: Number(page), per_page: Number(per_page) });
 });
 
 // ─── Top donors ──────────────────────────────────────────────────────────────

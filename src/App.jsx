@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, PlusCircle, Database, Webhook, Shield, LogOut, ChevronRight, BarChart2, GitMerge, LineChart, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, PlusCircle, Database, Webhook, Shield, LogOut, ChevronRight, BarChart2, GitMerge, LineChart, Menu, X, ClipboardList } from 'lucide-react';
 import { getSummary, adminLogin } from './services/api';
 import Dashboard from './components/Dashboard';
 import CustomerDetail from './components/CustomerDetail';
@@ -13,6 +13,7 @@ import Analytics from './components/Analytics';
 import Charts from './components/Charts';
 import Duplicates from './components/Duplicates';
 import Donors from './components/Donors';
+import ActivityLog from './components/ActivityLog';
 
 const PAGE_TITLES = {
   '/': { title: 'Dashboard', breadcrumb: 'Home / Dashboard' },
@@ -24,6 +25,7 @@ const PAGE_TITLES = {
   '/users': { title: 'User Management', breadcrumb: 'Home / Users' },
   '/webhooks': { title: 'Webhooks', breadcrumb: 'Home / Webhooks' },
   '/charts': { title: 'Charts', breadcrumb: 'Home / Charts' },
+  '/activity-log': { title: 'Activity Log', breadcrumb: 'Home / Activity Log' },
 };
 
 function NavItem({ to, icon: Icon, label, active, onClick }) {
@@ -83,6 +85,9 @@ function SidebarContent({ location, isAdmin, isManagerOrAbove, adminToken, curre
               )}
               {isAdmin && (
                 <NavItem to="/users" icon={Shield} label="Users" active={location.pathname === '/users'} onClick={onNavClick} />
+              )}
+              {isManagerOrAbove && (
+                <NavItem to="/activity-log" icon={ClipboardList} label="Activity Log" active={location.pathname === '/activity-log'} onClick={onNavClick} />
               )}
             </div>
           </div>
@@ -279,6 +284,7 @@ function App() {
             <Route path="/staff" element={<PrivateRoute minRole="admin"><StaffPanel /></PrivateRoute>} />
             <Route path="/users" element={<PrivateRoute minRole="admin"><UserManagement /></PrivateRoute>} />
             <Route path="/webhooks" element={<PrivateRoute minRole="manager"><WebhooksPanel /></PrivateRoute>} />
+            <Route path="/activity-log" element={<PrivateRoute minRole="manager"><ActivityLog /></PrivateRoute>} />
             <Route path="*" element={<Navigate to={adminToken ? '/' : '/login'} replace />} />
           </Routes>
         </main>
