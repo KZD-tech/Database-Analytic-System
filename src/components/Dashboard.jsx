@@ -37,31 +37,39 @@ const statusDescriptions = {
   churn: 'Churned donors have stopped donating after a previous period.'
 };
 
-const barChartData = (series) => {
-  const width = 680;
-  const height = 360;
-  const paddingLeft = 56;
-  const paddingRight = 16;
-  const paddingTop = 24;
-  const paddingBottom = 48;
-  const plotWidth = width - paddingLeft - paddingRight;
-  const plotHeight = height - paddingTop - paddingBottom;
+const lineChartData = (series) => {
+  const W = 720, H = 300, PL = 52, PR = 20, PT = 16, PB = 40;
+  const plotW = W - PL - PR;
+  const plotH = H - PT - PB;
+  const values = series.map((d) => d.value);
+  const maxV = Math.max(...values, 1);
+  const n = series.length;
 
-  const values = series.map((item) => item.value);
-  const maxValue = Math.max(...values, 1);
+  const xPos = (i) => PL + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yPos = (v) => PT + plotH - (v / maxV) * plotH;
+  const points = series.map((d, i) => ({ ...d, x: xPos(i), y: yPos(d.value) }));
 
-  const slotWidth = plotWidth / Math.max(series.length, 1);
-  const barWidth = Math.max(6, slotWidth * 0.6);
+  let linePath = '';
+  let areaPath = '';
+  if (points.length >= 2) {
+    linePath = `M ${points[0].x},${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      const p = points[i - 1], c = points[i];
+      const cpX = (p.x + c.x) / 2;
+      linePath += ` C ${cpX},${p.y} ${cpX},${c.y} ${c.x},${c.y}`;
+    }
+    areaPath = `${linePath} L ${points[points.length - 1].x},${PT + plotH} L ${points[0].x},${PT + plotH} Z`;
+  } else if (points.length === 1) {
+    linePath = `M ${points[0].x},${points[0].y}`;
+  }
 
-  const bars = series.map((item, index) => {
-    const slotX = paddingLeft + index * slotWidth;
-    const barX = slotX + (slotWidth - barWidth) / 2;
-    const barHeight = Math.max(2, (item.value / maxValue) * plotHeight);
-    const barY = paddingTop + plotHeight - barHeight;
-    return { ...item, barX, barY, barWidth, barHeight };
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => {
+    const val = t * maxV;
+    const lbl = val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}K` : val.toFixed(0);
+    return { t, y: PT + plotH * (1 - t), lbl };
   });
 
-  return { width, height, paddingLeft, paddingTop, paddingBottom, plotWidth, plotHeight, bars, maxValue };
+  return { W, H, PL, PT, PB, plotW, plotH, points, linePath, areaPath, maxV, ticks };
 };
 
 const pieChartData = (summary) => {
@@ -249,7 +257,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
     setShowDateMenu(false);
   };
 
-  const barData = barChartData(chartSeries.length > 0 ? chartSeries : [{ label: '—', value: 0 }]);
+  const lineData = lineChartData(chartSeries.length > 0 ? chartSeries : [{ label: '—', value: 0 }]);
 
   const formatCsvValue = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
@@ -412,16 +420,16 @@ export default function Dashboard({ summary, loading: appLoading }) {
       </div>
 
       {/* Stat cards */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {STAT_CARDS.map((card) => (
-          <div key={card.key} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{card.label}</p>
-              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${card.iconBg}`}>
-                <card.icon className={`h-4 w-4 ${card.iconColor}`} />
+          <div key={card.key} className="rounded-xl bg-white px-5 py-4 border border-slate-200">
+            <div className="flex items-center gap-2 mb-3">
+              <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${card.iconBg}`}>
+                <card.icon className={`h-3.5 w-3.5 ${card.iconColor}`} />
               </div>
+              <p className="text-xs font-semibold text-slate-500">{card.label}</p>
             </div>
-            <p className="text-2xl font-bold text-slate-900 leading-none truncate">{card.valueFn(summary)}</p>
+            <p className="text-[1.6rem] font-bold text-slate-900 leading-none tracking-tight truncate">{card.valueFn(summary)}</p>
             {card.subFn && (
               <p className="mt-1 text-xs text-slate-400 truncate">{card.subFn(summary)}</p>
             )}
@@ -430,39 +438,55 @@ export default function Dashboard({ summary, loading: appLoading }) {
       </div>
 
       {/* Charts row */}
-      <div className="grid gap-6 xl:grid-cols-[1fr_280px]">
-        {/* Bar chart */}
-        <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-          <div className="mb-5">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Donations</p>
-            <h3 className="mt-1 text-base font-bold text-slate-900">Monthly Totals</h3>
+      <div className="grid gap-4 xl:grid-cols-[1fr_260px]">
+        {/* Line chart */}
+        <div className="rounded-xl bg-white border border-slate-200 p-5">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Donation Volume</p>
+              <h3 className="mt-0.5 text-sm font-semibold text-slate-800">Monthly Totals</h3>
+            </div>
             {(startDate || endDate) && (
-              <p className="mt-0.5 text-xs text-slate-400">
+              <span className="text-xs text-slate-400 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
                 {startDate || '—'} → {endDate || '—'}
-              </p>
+              </span>
             )}
           </div>
 
           {chartLoading ? (
-            <div className="flex h-[340px] items-center justify-center text-sm text-slate-400">Loading…</div>
+            <div className="flex h-[280px] items-center justify-center text-sm text-slate-400">Loading…</div>
           ) : (
-            <svg viewBox={`0 0 ${barData.width} ${barData.height}`} className="w-full h-[340px]">
-              {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
-                const y = barData.paddingTop + (1 - tick) * barData.plotHeight;
-                const val = tick * barData.maxValue;
-                const lbl = val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}K` : val.toFixed(0);
-                return (
-                  <g key={tick}>
-                    <line x1={barData.paddingLeft} y1={y} x2={barData.paddingLeft + barData.plotWidth} y2={y} stroke="#f1f5f9" strokeWidth="1" />
-                    <text x={barData.paddingLeft - 6} y={y + 4} fill="#cbd5e1" fontSize="9" textAnchor="end">{lbl}</text>
-                  </g>
-                );
-              })}
-              {barData.bars.map((bar) => (
-                <g key={bar.label}>
-                  <title>{fmtRM(bar.value)}</title>
-                  <rect x={bar.barX} y={bar.barY} width={bar.barWidth} height={bar.barHeight} fill="#3b82f6" rx="4" />
-                  <text x={bar.barX + bar.barWidth / 2} y={barData.height - barData.paddingBottom + 16} fill="#94a3b8" fontSize="10" textAnchor="middle">{bar.label}</text>
+            <svg viewBox={`0 0 ${lineData.W} ${lineData.H}`} className="w-full h-[280px]">
+              <defs>
+                <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity="0.12" />
+                  <stop offset="80%" stopColor="#6366f1" stopOpacity="0.01" />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {/* Grid lines */}
+              {lineData.ticks.map((tick) => (
+                <g key={tick.t}>
+                  {tick.t > 0 && (
+                    <line x1={lineData.PL} y1={tick.y} x2={lineData.W - lineData.PR} y2={tick.y}
+                      stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 3" />
+                  )}
+                  <text x={lineData.PL - 8} y={tick.y + 4} fill="#94a3b8" fontSize="9.5" textAnchor="end">{tick.lbl}</text>
+                </g>
+              ))}
+              {/* X-axis base line */}
+              <line x1={lineData.PL} y1={lineData.PT + lineData.plotH} x2={lineData.W - lineData.PR} y2={lineData.PT + lineData.plotH} stroke="#e2e8f0" strokeWidth="1" />
+              {/* Area fill */}
+              {lineData.areaPath && <path d={lineData.areaPath} fill="url(#lineGrad)" />}
+              {/* Line */}
+              {lineData.linePath && (
+                <path d={lineData.linePath} fill="none" stroke="#6366f1" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+              )}
+              {/* Dots + labels */}
+              {lineData.points.map((p, i) => (
+                <g key={i}>
+                  <circle cx={p.x} cy={p.y} r="3" fill="#fff" stroke="#6366f1" strokeWidth="2" />
+                  <text x={p.x} y={lineData.H - lineData.PB + 14} fill="#94a3b8" fontSize="9.5" textAnchor="middle">{p.label}</text>
                 </g>
               ))}
             </svg>
@@ -470,47 +494,40 @@ export default function Dashboard({ summary, loading: appLoading }) {
         </div>
 
         {/* Donut chart */}
-        <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-          <div className="mb-5">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Overview</p>
-            <h3 className="mt-1 text-base font-bold text-slate-900">Donor Status</h3>
+        <div className="rounded-xl bg-white border border-slate-200 p-5">
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Overview</p>
+            <h3 className="mt-0.5 text-sm font-semibold text-slate-800">Donor Status</h3>
           </div>
 
           {(() => {
             const pie = pieChartData(summary);
             return (
-              <div className="flex flex-col gap-5">
-                <div className="flex justify-center">
-                  <svg viewBox="0 0 220 220" className="w-[160px]">
-                    {pie.total === 0 ? (
-                      <circle cx="110" cy="110" r="88" fill="#f1f5f9" />
-                    ) : (
-                      pie.paths.map((seg) => (
-                        <path key={seg.key} d={seg.d} fill={seg.color}>
-                          <title>{seg.label}: {seg.value} ({seg.percent}%)</title>
-                        </path>
-                      ))
-                    )}
-                    <circle cx="110" cy="110" r="52" fill="white" />
-                    <text x="110" y="104" textAnchor="middle" fill="#0f172a" fontSize="20" fontWeight="700">{pie.total.toLocaleString('en-MY')}</text>
-                    <text x="110" y="120" textAnchor="middle" fill="#94a3b8" fontSize="10">donors</text>
-                  </svg>
-                </div>
-                <div className="space-y-3">
+              <div className="flex flex-col items-center gap-4">
+                <svg viewBox="0 0 220 220" className="w-[140px]">
+                  {pie.total === 0 ? (
+                    <circle cx="110" cy="110" r="88" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="1" />
+                  ) : (
+                    pie.paths.map((seg) => (
+                      <path key={seg.key} d={seg.d} fill={seg.color} opacity="0.9">
+                        <title>{seg.label}: {seg.value} ({seg.percent}%)</title>
+                      </path>
+                    ))
+                  )}
+                  <circle cx="110" cy="110" r="52" fill="white" />
+                  <text x="110" y="106" textAnchor="middle" fill="#0f172a" fontSize="18" fontWeight="700">{pie.total.toLocaleString('en-MY')}</text>
+                  <text x="110" y="122" textAnchor="middle" fill="#94a3b8" fontSize="9">donors</text>
+                </svg>
+                <div className="w-full space-y-2">
                   {pie.paths.map((seg) => (
-                    <div key={seg.key}>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: seg.color }} />
-                          <span className="text-xs font-medium text-slate-600">{seg.label}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="font-bold text-slate-900">{seg.value.toLocaleString('en-MY')}</span>
-                          <span className="text-slate-400 w-8 text-right">{seg.percent}%</span>
-                        </div>
+                    <div key={seg.key} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: seg.color }} />
+                        <span className="text-slate-600">{seg.label}</span>
                       </div>
-                      <div className="h-1.5 w-full rounded-full bg-slate-100">
-                        <div className="h-1.5 rounded-full transition-all" style={{ width: `${seg.percent}%`, backgroundColor: seg.color }} />
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-800">{seg.value.toLocaleString('en-MY')}</span>
+                        <span className="text-slate-400 w-7 text-right">{seg.percent}%</span>
                       </div>
                     </div>
                   ))}
@@ -522,7 +539,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
       </div>
 
       {/* Filter bar */}
-      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <div className="rounded-xl bg-white border border-slate-200 p-4">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="space-y-4 flex-1 min-w-0">
             <div className="relative">
@@ -560,7 +577,7 @@ export default function Dashboard({ summary, loading: appLoading }) {
       </div>
 
       {/* Donor table */}
-      <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
+      <div className="rounded-xl bg-white border border-slate-200">
         <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100">
           <div>
             <h3 className="text-base font-bold text-slate-900">Donor List</h3>
