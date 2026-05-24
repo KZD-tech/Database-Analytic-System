@@ -947,6 +947,7 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
   const now = new Date().toISOString();
   const CHUNK = 300;
   let imported = 0;
+  let newDonorsCount = 0;
 
   for (let i = 0; i < records.length; i += CHUNK) {
     const chunk = records.slice(i, i + CHUNK);
@@ -1029,6 +1030,7 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
         });
       } else {
         insertedDonors = data || [];
+      newDonorsCount += insertedDonors.length;
       }
     }
 
@@ -1054,7 +1056,7 @@ app.post('/api/orders/bulk-upload', requireAuth('editor'), async (req, res) => {
     imported += donationRows.length;
   }
 
-  res.json({ success: true, imported });
+  res.json({ success: true, imported, new_donors: newDonorsCount });
 });
 
 // ─── Donor notes ─────────────────────────────────────────────────────────────
