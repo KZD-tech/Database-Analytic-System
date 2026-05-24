@@ -1572,11 +1572,48 @@ app.delete('/api/marketing-costs/:id', requireAuth('manager'), async (req, res) 
   res.json({ success: true });
 });
 
+app.post('/api/marketing-costs/bulk', requireAuth('manager'), async (req, res) => {
+  const { rows } = req.body;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return res.status(400).json({ error: 'rows array is required.' });
+  }
+  const VALID_PLATFORMS = ['facebook','google','instagram','tiktok','youtube','website','email','whatsapp','phone_call','other'];
+  const records = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const platform = (r.platform || '').trim().toLowerCase().replace(/\s+/g, '_');
+    const campaign = (r.campaign || '').trim();
+    const cost_date = (r.cost_date || '').trim();
+    const amount = Number(r.amount);
+    if (!campaign || !cost_date || isNaN(amount) || amount < 0) {
+      return res.status(400).json({ error: `Row ${i + 2}: campaign, cost_date, and valid amount required.` });
+    }
+    records.push({
+      platform: VALID_PLATFORMS.includes(platform) ? platform : 'other',
+      campaign,
+      cost_date,
+      amount,
+      notes: (r.notes || '').trim() || null,
+      created_by: req.user?.email || null,
+    });
+  }
+  const { error } = await supabase.from('marketing_costs').insert(records);
+  if (error) return res.status(500).json({ error: error.message });
+  await logActivity(req, 'bulk_marketing_costs', { imported: records.length });
+  res.json({ success: true, imported: records.length });
+});
+
 app.get('/api/marketing-roi', requireAuth('manager'), async (req, res) => {
-  const [costsRes, donationsRes] = await Promise.all([
-    supabase.from('marketing_costs').select('campaign, platform, amount'),
-    supabase.from('donations').select('campaign_name, amount').limit(200000),
-  ]);
+  const { from_date, to_date } = req.query;
+  let costsQuery = supabase.from('marketing_costs').select('campaign, platform, amount, cost_date');
+  if (from_date) costsQuery = costsQuery.gte('cost_date', from_date);
+  if (to_date)   costsQuery = costsQuery.lte('cost_date', to_date);
+
+  let donationsQuery = supabase.from('donations').select('campaign_name, amount, donation_date').limit(200000);
+  if (from_date) donationsQuery = donationsQuery.gte('donation_date', from_date);
+  if (to_date)   donationsQuery = donationsQuery.lte('donation_date', to_date);
+
+  const [costsRes, donationsRes] = await Promise.all([costsQuery, donationsQuery]);
 
   if (costsRes.error) return res.status(500).json({ error: costsRes.error.message });
 

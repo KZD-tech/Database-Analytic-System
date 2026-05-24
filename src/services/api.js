@@ -163,6 +163,9 @@ export function createMarketingCost(payload) {
 export function deleteMarketingCost(id) {
   return api.delete(`/marketing-costs/${id}`).then((res) => res.data);
 }
-export function getMarketingRoi() {
-  return api.get('/marketing-roi').then((res) => res.data).catch(() => []);
+export function getMarketingRoi(params = {}) {
+  return api.get('/marketing-roi', { params }).then((res) => res.data).catch(() => []);
+}
+export function bulkUploadMarketingCosts(rows) {
+  return api.post('/marketing-costs/bulk', { rows }).then((res) => res.data);
 }
