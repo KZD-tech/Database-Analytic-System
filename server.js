@@ -1524,6 +1524,101 @@ app.get('/api/charts/yoy-comparison', async (req, res) => {
   res.json({ years, data });
 });
 
+// ─── Marketing Costs ──────────────────────────────────────────────────────────
+
+app.get('/api/marketing-costs', requireAuth('manager'), async (req, res) => {
+  const { page = 1, per_page = 50, platform, campaign, from_date, to_date } = req.query;
+  const from = (Number(page) - 1) * Number(per_page);
+  const to   = from + Number(per_page) - 1;
+
+  let query = supabase
+    .from('marketing_costs')
+    .select('*', { count: 'exact' })
+    .order('cost_date', { ascending: false })
+    .range(from, to);
+
+  if (platform && platform !== 'all') query = query.eq('platform', platform);
+  if (campaign) query = query.ilike('campaign', `%${campaign}%`);
+  if (from_date) query = query.gte('cost_date', from_date);
+  if (to_date)   query = query.lte('cost_date', to_date);
+
+  const { data, error, count } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ costs: data || [], total: count || 0 });
+});
+
+app.post('/api/marketing-costs', requireAuth('manager'), async (req, res) => {
+  const { platform, campaign, cost_date, amount, notes } = req.body;
+  if (!platform || !campaign || !cost_date || amount == null) {
+    return res.status(400).json({ error: 'platform, campaign, cost_date, and amount are required.' });
+  }
+  const { data, error } = await supabase.from('marketing_costs').insert([{
+    platform,
+    campaign: campaign.trim(),
+    cost_date,
+    amount: Number(amount),
+    notes: notes || null,
+    created_by: req.user?.email || null,
+  }]).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  await logActivity(req, 'add_marketing_cost', { platform, campaign, cost_date, amount: Number(amount) });
+  res.json({ success: true, cost: data });
+});
+
+app.delete('/api/marketing-costs/:id', requireAuth('manager'), async (req, res) => {
+  const { id } = req.params;
+  const { error } = await supabase.from('marketing_costs').delete().eq('id', id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+app.get('/api/marketing-roi', requireAuth('manager'), async (req, res) => {
+  const [costsRes, donationsRes] = await Promise.all([
+    supabase.from('marketing_costs').select('campaign, platform, amount'),
+    supabase.from('donations').select('campaign_name, amount').limit(200000),
+  ]);
+
+  if (costsRes.error) return res.status(500).json({ error: costsRes.error.message });
+
+  const costs = costsRes.data || [];
+  const donations = donationsRes.data || [];
+
+  // Aggregate costs per campaign
+  const costMap = {};
+  const platformMap = {};
+  for (const c of costs) {
+    const key = c.campaign.trim().toLowerCase();
+    costMap[key] = (costMap[key] || 0) + Number(c.amount || 0);
+    if (!platformMap[key]) platformMap[key] = c.platform;
+  }
+
+  // Aggregate donations per campaign
+  const donationMap = {};
+  for (const d of donations) {
+    if (!d.campaign_name) continue;
+    const key = d.campaign_name.trim().toLowerCase();
+    donationMap[key] = (donationMap[key] || 0) + Number(d.amount || 0);
+  }
+
+  // Build ROI rows for every campaign that has costs
+  const rows = Object.keys(costMap).map((key) => {
+    const totalCost = costMap[key];
+    const totalRevenue = donationMap[key] || 0;
+    const roas = totalCost > 0 ? totalRevenue / totalCost : 0;
+    const originalCampaign = costs.find((c) => c.campaign.trim().toLowerCase() === key)?.campaign || key;
+    return {
+      campaign: originalCampaign,
+      platform: platformMap[key] || 'other',
+      total_cost: Number(totalCost.toFixed(2)),
+      total_revenue: Number(totalRevenue.toFixed(2)),
+      net: Number((totalRevenue - totalCost).toFixed(2)),
+      roas: Number(roas.toFixed(2)),
+    };
+  }).sort((a, b) => b.total_cost - a.total_cost);
+
+  res.json(rows);
+});
+
 // ─── Static files ─────────────────────────────────────────────────────────────
 
 const __filename = fileURLToPath(import.meta.url);

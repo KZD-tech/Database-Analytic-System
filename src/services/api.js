@@ -152,3 +152,17 @@ export function getDuplicates() {
 export function mergeDonors(payload) {
   return api.post('/donors/merge', payload).then((res) => res.data);
 }
+
+// Marketing costs
+export function getMarketingCosts(params = {}) {
+  return api.get('/marketing-costs', { params }).then((res) => res.data).catch(() => ({ costs: [], total: 0 }));
+}
+export function createMarketingCost(payload) {
+  return api.post('/marketing-costs', payload).then((res) => res.data);
+}
+export function deleteMarketingCost(id) {
+  return api.delete(`/marketing-costs/${id}`).then((res) => res.data);
+}
+export function getMarketingRoi() {
+  return api.get('/marketing-roi').then((res) => res.data).catch(() => []);
+}
