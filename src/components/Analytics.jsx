@@ -203,7 +203,82 @@ function MonthlyReport() {
   }, [month]);
 
   const handlePrint = () => {
-    window.print();
+    if (!report) return;
+
+    const campaignRows = report.campaigns.map((c, i) => {
+      const color = CAMPAIGN_COLORS[i % CAMPAIGN_COLORS.length];
+      const share = report.total_collection > 0
+        ? `${((c.total / report.total_collection) * 100).toFixed(1)}%` : '—';
+      return `<tr>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:6px;"></span>
+          ${c.name}
+        </td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:right;">${fmt(c.count)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:600;">${fmtRM(c.total)}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:right;color:#94a3b8;">${share}</td>
+      </tr>`;
+    }).join('');
+
+    const statCards = [
+      { label: 'Total Collection', value: fmtRM(report.total_collection), color: '#059669' },
+      { label: 'Transactions',     value: fmt(report.total_transactions),  color: '#2563eb' },
+      { label: 'Unique Donors',    value: fmt(report.unique_donors),        color: '#7c3aed' },
+      { label: 'New Donors',       value: fmt(report.new_donors),           color: '#d97706' },
+      { label: 'Avg Donation',     value: fmtRM(report.avg_donation),       color: '#0284c7' },
+    ].map((s) => `
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;flex:1;min-width:120px;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#64748b;margin:0 0 8px;">${s.label}</p>
+        <p style="font-size:20px;font-weight:700;color:${s.color};margin:0;">${s.value}</p>
+      </div>`).join('');
+
+    const campaignTable = report.campaigns.length > 0 ? `
+      <h3 style="font-size:13px;font-weight:700;color:#334155;margin:24px 0 10px;">Campaign Breakdown</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:#f8fafc;">
+            <th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;border-bottom:1px solid #e2e8f0;">Campaign</th>
+            <th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;border-bottom:1px solid #e2e8f0;">Transactions</th>
+            <th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;border-bottom:1px solid #e2e8f0;">Total</th>
+            <th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;border-bottom:1px solid #e2e8f0;">Share</th>
+          </tr>
+        </thead>
+        <tbody>${campaignRows}</tbody>
+        <tfoot>
+          <tr style="background:#f8fafc;">
+            <td style="padding:10px 14px;font-weight:700;color:#334155;">Total</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#334155;">${fmt(report.total_transactions)}</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#0f172a;">${fmtRM(report.total_collection)}</td>
+            <td style="padding:10px 14px;text-align:right;font-weight:700;color:#334155;">100%</td>
+          </tr>
+        </tfoot>
+      </table>` : '';
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Monthly Report — ${monthLabel}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; background: #fff; padding: 32px 40px; }
+    @media print { body { padding: 20px 24px; } }
+  </style>
+</head>
+<body>
+  <img src="${window.location.origin}/Logo%20IhsanKu.png" alt="IhsanKu" style="height:36px;margin-bottom:20px;" />
+  <h1 style="font-size:22px;font-weight:700;color:#0f172a;margin-bottom:4px;">Monthly Donation Report</h1>
+  <p style="font-size:14px;color:#64748b;margin-bottom:24px;">${monthLabel}</p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">${statCards}</div>
+  ${campaignTable}
+  <p style="margin-top:24px;font-size:11px;color:#94a3b8;">Generated on ${new Date().toLocaleDateString('en-MY', { dateStyle: 'long' })}</p>
+  <script>window.onload = function() { window.print(); };<\/script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
   };
 
   const STAT_CARDS = report ? [
