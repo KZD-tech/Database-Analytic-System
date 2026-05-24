@@ -1524,6 +1524,120 @@ app.get('/api/charts/yoy-comparison', async (req, res) => {
   res.json({ years, data });
 });
 
+// ─── Chart: Donor Growth (new donors per month + cumulative) ─────────────────
+
+app.get('/api/charts/donor-growth', async (req, res) => {
+  const months = parseInt(req.query.months || '12', 10);
+  const rows = [];
+  const now = new Date();
+  let cumulative = 0;
+
+  // Get total donors before the window for cumulative base
+  const windowStart = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
+  const windowStartStr = windowStart.toISOString().slice(0, 10);
+  const { count: baseCumulative } = await supabase
+    .from('donors').select('*', { count: 'exact', head: true })
+    .lt('created_at', `${windowStartStr}T00:00:00`);
+  cumulative = baseCumulative || 0;
+
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const year = d.getFullYear();
+    const mon = String(d.getMonth() + 1).padStart(2, '0');
+    const from = `${year}-${mon}-01T00:00:00`;
+    const lastDay = new Date(year, d.getMonth() + 1, 0).getDate();
+    const to = `${year}-${mon}-${String(lastDay).padStart(2, '0')}T23:59:59`;
+    const { count } = await supabase.from('donors').select('*', { count: 'exact', head: true })
+      .gte('created_at', from).lte('created_at', to);
+    const newCount = count || 0;
+    cumulative += newCount;
+    rows.push({ month: `${year}-${mon}`, new_donors: newCount, cumulative });
+  }
+  res.json(rows);
+});
+
+// ─── Chart: New vs Returning Donors per month ─────────────────────────────────
+
+app.get('/api/charts/new-vs-returning', async (req, res) => {
+  const months = parseInt(req.query.months || '12', 10);
+  const rows = [];
+  const now = new Date();
+
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const year = d.getFullYear();
+    const mon = String(d.getMonth() + 1).padStart(2, '0');
+    const from = `${year}-${mon}-01`;
+    const lastDay = new Date(year, d.getMonth() + 1, 0).getDate();
+    const to = `${year}-${mon}-${String(lastDay).padStart(2, '0')}`;
+
+    // Donors who donated this month
+    const { data: donatedThisMonth } = await supabase
+      .from('donations').select('donor_id')
+      .gte('donation_date', from).lte('donation_date', to).limit(10000);
+    const donorIds = [...new Set((donatedThisMonth || []).map(d => d.donor_id).filter(Boolean))];
+
+    // New donors = donors created this month who also donated this month
+    let newCount = 0;
+    if (donorIds.length > 0) {
+      const { count } = await supabase.from('donors').select('*', { count: 'exact', head: true })
+        .in('id', donorIds).gte('created_at', `${from}T00:00:00`).lte('created_at', `${to}T23:59:59`);
+      newCount = count || 0;
+    }
+    const returningCount = Math.max(0, donorIds.length - newCount);
+    rows.push({ month: `${year}-${mon}`, new: newCount, returning: returningCount });
+  }
+  res.json(rows);
+});
+
+// ─── Chart: Source Breakdown Donut ────────────────────────────────────────────
+
+app.get('/api/charts/source-breakdown', async (req, res) => {
+  const { data, error } = await supabase
+    .from('donations').select('source, amount').limit(50000);
+  if (error) return res.status(500).json({ error: error.message });
+
+  const map = {};
+  (data || []).forEach(d => {
+    const key = (d.source || 'Unknown').trim() || 'Unknown';
+    if (!map[key]) map[key] = { count: 0, total: 0 };
+    map[key].count += 1;
+    map[key].total += Number(d.amount || 0);
+  });
+
+  const rows = Object.entries(map)
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([source, v]) => ({ source, count: v.count, total: Number(v.total.toFixed(2)) }));
+
+  res.json(rows);
+});
+
+// ─── Chart: Year-over-Year Comparison ─────────────────────────────────────────
+
+app.get('/api/charts/yoy-comparison', async (req, res) => {
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const prevYear = curYear - 1;
+  const rows = [];
+
+  for (let m = 1; m <= 12; m++) {
+    const mon = String(m).padStart(2, '0');
+
+    const getTotal = async (year, month) => {
+      const lastDay = new Date(year, month, 0).getDate();
+      const { data } = await supabase.from('donations').select('amount')
+        .gte('donation_date', `${year}-${month}-01`)
+        .lte('donation_date', `${year}-${month}-${String(lastDay).padStart(2, '0')}`).limit(50000);
+      return (data || []).reduce((s, d) => s + Number(d.amount || 0), 0);
+    };
+
+    const [cur, prev] = await Promise.all([getTotal(curYear, mon), getTotal(prevYear, mon)]);
+    rows.push({ month: mon, current: Number(cur.toFixed(2)), previous: Number(prev.toFixed(2)) });
+  }
+
+  res.json({ current_year: curYear, previous_year: prevYear, data: rows });
+});
+
 // ─── Static files ─────────────────────────────────────────────────────────────
 
 const __filename = fileURLToPath(import.meta.url);
